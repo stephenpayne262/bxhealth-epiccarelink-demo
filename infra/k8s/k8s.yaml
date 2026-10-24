@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bxhealth-epiccarelink-demo
+  namespace: ping-devops-stephenpayne
+  labels:
+    app: bxhealth-epiccarelink-demo
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: bxhealth-epiccarelink-demo
+  template:
+    metadata:
+      labels:
+        app: bxhealth-epiccarelink-demo
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: ghcr.io/stephenpayne262/bxhealth-epiccarelink-demo:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 3010
+          env:
+            - name: PORT
+              value: "3010"
+            - name: NODE_ENV
+              value: production
+          envFrom:
+            - secretRef:
+                name: bxhealth-epiccarelink-demo-secrets
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bxhealth-epiccarelink-demo
+  namespace: ping-devops-stephenpayne
+spec:
+  type: ClusterIP
+  selector:
+    app: bxhealth-epiccarelink-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
