@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BX-Health EpicCare Link</title>
+  <style>
+    :root {
+      --artifact-background: var(--theme-background, #ffffff);
+      --artifact-background-light: var(--theme-background-light, #f5f7fa);
+      --artifact-background-mid: var(--theme-background-mid, #ebeff5);
+      --artifact-border-light: var(--theme-border-light, #d8dde6);
+      --artifact-border-dark: var(--theme-border-dark, #b9c3d0);
+      --artifact-primary-brand: var(--theme-primary-brand, #0b4c8c);
+      --artifact-primary-highlight: var(--theme-primary-highlight, #123d73);
+      --artifact-primary-hover: var(--theme-primary-hover, #0a3561);
+      --artifact-selected: var(--theme-selected, #e9f1fb);
+      --artifact-text-primary: var(--theme-text-primary, #14233a);
+      --artifact-text-secondary: var(--theme-text-secondary, #5c6b80);
+      --artifact-text-highlight: var(--theme-text-highlight, #fff8e5);
+      --artifact-success-bg: #e8f5ee;
+      --artifact-success-text: #184f2b;
+      --artifact-accent-soft: #dceaf8;
+      --artifact-panel-overlay: rgba(11, 76, 140, 0.84);
+      --artifact-shadow: 0 18px 38px rgba(18, 35, 58, 0.16);
+    }
+    html[data-theme='dark'] {
+      --artifact-success-bg: #143425;
+      --artifact-success-text: #d8f5df;
+      --artifact-accent-soft: #17314a;
+      --artifact-panel-overlay: rgba(8, 30, 54, 0.86);
+      --artifact-shadow: 0 24px 50px rgba(0, 0, 0, 0.32);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, Arial, sans-serif;
+      background: var(--artifact-background-light);
+      color: var(--artifact-text-primary);
+      min-height: 100vh;
+    }
+    .shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: minmax(360px, 520px) 1fr;
+    }
+    .login-pane {
+      background: var(--artifact-background);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 32px;
+      border-right: 1px solid var(--artifact-border-light);
+    }
+    .login-wrap {
+      max-width: 400px;
+      width: 100%;
+      margin: 0 auto;
+    }
+    .top-brand {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      gap: 16px;
+    }
+    .top-brand img {
+      height: 34px;
+      width: auto;
+      display: block;
+    }
+    .product-chip {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 7px 10px;
+      border-radius: 999px;
+      color: var(--artifact-primary-highlight);
+      background: var(--artifact-accent-soft);
+      border: 1px solid var(--artifact-border-light);
+    }
+    .card {
+      background: var(--artifact-background);
+      border: 1px solid var(--artifact-border-light);
+      border-radius: 16px;
+      padding: 28px 24px;
+      box-shadow: var(--artifact-shadow);
+    }
+    h1 {
+      font-size: 30px;
+      line-height: 1.1;
+      margin: 0 0 6px;
+      color: var(--artifact-primary-highlight);
+    }
+    .subhead {
+      font-size: 14px;
+      line-height: 1.55;
+      color: var(--artifact-text-secondary);
+      margin: 0 0 22px;
+    }
+    .field {
+      margin-bottom: 14px;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: var(--artifact-text-primary);
+    }
+    input {
+      width: 100%;
+      padding: 13px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--artifact-border-dark);
+      background: var(--artifact-background);
+      color: var(--artifact-text-primary);
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+    }
+    input:focus {
+      border-color: var(--artifact-primary-brand);
+      box-shadow: 0 0 0 3px var(--artifact-selected);
+      transform: translateY(-1px);
+    }
+    .hint {
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--artifact-text-secondary);
+      margin: 2px 0 0;
+    }
+    .actions {
+      display: grid;
+      gap: 12px;
+      margin-top: 18px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-height: 46px;
+      padding: 12px 16px;
+      border-radius: 10px;
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 700;
+      border: 1px solid transparent;
+      transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+      cursor: pointer;
+    }
+    .btn:hover, .btn:focus-visible {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 20px rgba(18, 35, 58, 0.14);
+    }
+    .btn-primary {
+      background: var(--artifact-primary-highlight);
+      color: var(--artifact-background);
+    }
+    .btn-primary:hover, .btn-primary:focus-visible {
+      background: var(--artifact-primary-hover);
+    }
+    .btn-secondary {
+      background: var(--artifact-background);
+      color: var(--artifact-primary-highlight);
+      border-color: var(--artifact-primary-brand);
+    }
+    .btn-secondary:hover, .btn-secondary:focus-visible {
+      background: var(--artifact-selected);
+    }
+    .link-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 16px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .link-row a, .help a, .fine-print a {
+      color: var(--artifact-primary-brand);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .link-row a:hover, .help a:hover, .fine-print a:hover { text-decoration: underline; }
+    .help {
+      margin-top: 26px;
+      padding-top: 18px;
+      border-top: 1px solid var(--artifact-border-light);
+      font-size: 13px;
+      color: var(--artifact-text-secondary);
+      line-height: 1.6;
+    }
+    .help strong {
+      display: block;
+      color: var(--artifact-text-primary);
+      margin-bottom: 4px;
+    }
+    .fine-print {
+      margin-top: 16px;
+      font-size: 11px;
+      line-height: 1.55;
+      color: var(--artifact-text-secondary);
+    }
+    .visual-pane {
+      position: relative;
+      background:
+        linear-gradient(135deg, var(--artifact-panel-overlay), rgba(11, 76, 140, 0.56)),
+        url('https://storage.googleapis.com/encore-prod-baseline-images/health-bg.jpeg') center/cover no-repeat;
+      display: flex;
+      align-items: flex-end;
+      justify-content: flex-start;
+      padding: 44px;
+      overflow: hidden;
+    }
+    .visual-card {
+      max-width: 560px;
+      color: var(--artifact-background);
+      animation: rise 0.55s ease both;
+    }
+    .visual-card img {
+      height: 52px;
+      width: auto;
+      display: block;
+      margin-bottom: 20px;
+    }
+    .eyebrow {
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      opacity: 0.88;
+      margin-bottom: 12px;
+      font-weight: 700;
+    }
+    .visual-card h2 {
+      font-size: 42px;
+      line-height: 1.04;
+      margin: 0 0 14px;
+      color: var(--artifact-background);
+    }
+    .visual-card p {
+      font-size: 16px;
+      line-height: 1.65;
+      margin: 0 0 18px;
+      max-width: 52ch;
+      opacity: 0.98;
+    }
+    .feature-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 20px;
+      font-size: 14px;
+    }
+    .feature-list span {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.16);
+      width: fit-content;
+    }
+    .token-note {
+      margin-top: 14px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: var(--artifact-success-bg);
+      color: var(--artifact-success-text);
+      font-size: 12px;
+      line-height: 1.5;
+      border: 1px solid rgba(0,0,0,0.06);
+    }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(14px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @media (max-width: 980px) {
+      .shell { grid-template-columns: 1fr; }
+      .visual-pane { min-height: 320px; padding: 28px; }
+      .login-pane { min-height: auto; }
+      .visual-card h2 { font-size: 34px; }
+    }
+    @media print {
+      body {
+        margin: 0;
+        padding: 0.4in 0.6in;
+        background: #fff;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+      }
+      .shell, main {
+        max-width: 100% !important;
+        width: 100% !important;
+        display: block !important;
+      }
+      .visual-pane {
+        min-height: 220px !important;
+        margin-top: 16px;
+      }
+      .card {
+        box-shadow: none !important;
+        border: 1px solid rgba(0,0,0,0.08) !important;
+      }
+      *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="login-pane">
+      <div class="login-wrap">
+        <div class="top-brand">
+          <img src="https://demo.bxindustry.org/health/logo.svg" alt="BX-Health logo" />
+          <div class="product-chip">EpicCare Style Demo</div>
+        </div>
+        <div class="card">
+          <h1>EpicCare Link</h1>
+          <p class="subhead">BX-Health external provider access demo with PingOne Advanced Identity Cloud and OIDC authorization code flow.</p>
+          <div class="field">
+            <label for="user">User ID</label>
+            <input id="user" type="text" placeholder="Enter your user ID" />
+          </div>
+          <div class="field">
+            <label for="pass">Password</label>
+            <input id="pass" type="password" placeholder="Enter your password" />
+            <p class="hint">Classic fields are visual only in this demo. Use the Ping buttons below to start the live OIDC flow.</p>
+          </div>
+          <div class="actions">
+            <a class="btn btn-primary" href="/auth/login">Sign in with Ping</a>
+            <a class="btn btn-secondary" href="/auth/register">Register with Ping</a>
+          </div>
+          <div class="link-row">
+            <a href="/auth/register">New Users Click Here to Request Access</a>
+            <a href="#support">Forgot password or problems logging in?</a>
+          </div>
+          <div class="token-note">After the callback, the app displays the raw OIDC token payload, decoded ID token claims, UserInfo claims, and the requested business-field mappings.</div>
+          <div id="support" class="help">
+            <strong>Problems logging in?</strong>
+            Contact the BX-Health Help Desk at <a href="tel:18336914357">1-833-691-4357</a> or update the support block in <code>index.html</code> for your customer story.
+          </div>
+          <div class="fine-print">Demo defaults assume <code>http://localhost:3010/auth/callback</code> as the redirect URI and can be pointed at a registration journey using environment variables for authIndex routing.</div>
+        </div>
+      </div>
+    </section>
+    <aside class="visual-pane">
+      <div class="visual-card">
+        <img src="https://demo.bxindustry.org/health/logo.svg" alt="BX-Health white logo" />
+        <div class="eyebrow">Ping + BX-Health</div>
+        <h2>Patient and provider access that feels familiar.</h2>
+        <p>This demo borrows the layout cues of the target EpicCare Link page, then swaps in BX-Health branding, a cleaner modern login surface, and live PingOne AIC OIDC sign-in and registration entry points.</p>
+        <div class="feature-list">
+          <span>Authorization Code flow with PKCE + state</span>
+          <span>Configurable registration journey routing</span>
+          <span>Token and claim viewer after callback</span>
+        </div>
+      </div>
+    </aside>
+  </main>
+  <script>
+    window.GleanBridge && window.GleanBridge.postMessage({
+      actionId: 'export-pdf',
+      type: 'glean-add-menu',
+      metadata: { label: 'Export as PDF', icon: 'export' }
+    });
+    window.GleanBridge && window.GleanBridge.onMessage && window.GleanBridge.onMessage('action', function(data) {
+      if (data.actionId === 'export-pdf') window.print();
+    });
+  </script>
+</body>
+</html>
