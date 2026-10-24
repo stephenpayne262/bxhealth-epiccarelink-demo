@@ -4,6 +4,7 @@ metadata:
   name: bxhealth-epiccarelink-demo
   namespace: ping-devops-stephenpayne
   annotations:
+    external-dns.alpha.kubernetes.io/hostname: bxhealth-epiccarelink-demo.ping-devops.com
     nginx.ingress.kubernetes.io/backend-protocol: HTTP
 spec:
   ingressClassName: nginx-public

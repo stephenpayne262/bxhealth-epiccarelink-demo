@@ -52,7 +52,7 @@ AIC_REGISTER_AUTH_INDEX_VALUE=your-registration-journey-name
 
 ## AWS deployment
 
-Use `/redeploy-bxhealth-epiccarelink-demo` only after completing local testing in Docker. Pass `--skip-dns` to defer Route 53 provisioning and test with a hosts-file override. The skill targets context `ping-dev-aws-us-east-2-oidc`, namespace `ping-devops-stephenpayne`, and the unique host `bxhealth-epiccarelink-demo.ping-devops.com`. It uses the existing `nginx-public` Ingress and the controller's `*.ping-devops.com` certificate. DNS provisioning, when enabled, is limited to this app's exact hostname and requires an approved plan.
+Use `/redeploy-bxhealth-epiccarelink-demo` only after completing local testing in Docker. The app Ingress uses the cluster's ExternalDNS hostname annotation to publish its hostname through AWS. Pass `--skip-dns` to defer the annotation and test with `curl --resolve` or a hosts-file override. The skill targets context `ping-dev-aws-us-east-2-oidc`, namespace `ping-devops-stephenpayne`, and the unique host `bxhealth-epiccarelink-demo.ping-devops.com`. It uses the existing `nginx-public` Ingress and the controller's `*.ping-devops.com` certificate. Never provision its DNS record manually in Route 53.
 
 Register `https://bxhealth-epiccarelink-demo.ping-devops.com/auth/callback` as an allowed redirect URI in PingOne AIC; it is separate from the local callback. The app uses its own Kubernetes Secret. Create `infra/.env.k8s` from `infra/k8s/cluster.env.example` and enter the deployment-specific OIDC client values there. That file is ignored by Git. The deployment skill never changes the FHIR/MCP app, its Secret, or shared Ingress/TLS resources, and it publishes the container image without pushing the Git branch.
 # bxhealth-epiccarelink-demo
