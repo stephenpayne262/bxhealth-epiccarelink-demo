@@ -4,6 +4,7 @@ This package contains a lightweight local demo app that mimics the target EpicCa
 
 ## What it does
 - Renders an EpicCare-style login page branded for BX-Health
+- Shows the app version and Epic/MyChart trademark notice on the login page
 - Starts OIDC Authorization Code flow with PKCE from either:
   - `/auth/login`
   - `/auth/register`
@@ -11,7 +12,7 @@ This package contains a lightweight local demo app that mimics the target EpicCa
 - Exchanges the authorization code server-side
 - Displays:
   - the raw token response
-  - decoded ID token claims
+  - verified ID token claims
   - UserInfo claims
   - mapped business concepts: Email Address, Date of Birth, Zip Code, Full Name, Home Phone
 
@@ -40,6 +41,7 @@ export AIC_REGISTER_AUTH_INDEX_VALUE=your-registration-journey-name
 ## Notes
 - The app defaults to the values provided in the ticket.
 - The code uses discovery first when available, then falls back to the explicit endpoints.
-- The ID token is decoded for display purposes in the browser result page; it is not signature-verified in the UI.
+- The callback verifies ID-token signatures using the discovery JWKS and checks issuer, audience, expiration, issued-at time, and the login-flow nonce before displaying claims. Set `JWKS_URI` when discovery is unavailable and explicit endpoints are used.
+- This remains a demo: sessions are process-local, and the result page intentionally displays the token response. Do not use real patient data or production credentials.
 # bxhealth-epiccarelink-demo
 # bxhealth-epiccarelink-demo

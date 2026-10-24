@@ -48,14 +48,14 @@
       background: var(--artifact-background);
       display: flex;
       flex-direction: column;
-      justify-content: center;
+      justify-content: space-between;
       padding: 32px;
       border-right: 1px solid var(--artifact-border-light);
     }
     .login-wrap {
       max-width: 400px;
       width: 100%;
-      margin: 0 auto;
+      margin: auto;
     }
     .top-brand {
       display: flex;
@@ -79,6 +79,17 @@
       color: var(--artifact-primary-highlight);
       background: var(--artifact-accent-soft);
       border: 1px solid var(--artifact-border-light);
+    }
+    .product-mark {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+    }
+    .app-version {
+      color: var(--artifact-text-secondary);
+      font-size: 10px;
+      line-height: 1.3;
     }
     .card {
       background: var(--artifact-background);
@@ -204,6 +215,16 @@
       line-height: 1.55;
       color: var(--artifact-text-secondary);
     }
+    .pane-footer {
+      width: 100%;
+      max-width: 400px;
+      margin: 0 auto;
+      padding-top: 14px;
+      border-top: 1px solid var(--artifact-border-light);
+      color: var(--artifact-text-secondary);
+      font-size: 11px;
+      line-height: 1.5;
+    }
     .visual-pane {
       position: relative;
       background:
@@ -317,7 +338,10 @@
       <div class="login-wrap">
         <div class="top-brand">
           <img src="https://demo.bxindustry.org/health/logo.svg" alt="BX-Health logo" />
-          <div class="product-chip">EpicCare Style Demo</div>
+          <div class="product-mark">
+            <div class="product-chip">EpicCare Style Demo</div>
+            <span class="app-version">Version 1.0.2</span>
+          </div>
         </div>
         <div class="card">
           <h1>EpicCare Link</h1>
@@ -339,7 +363,7 @@
             <a href="/auth/register">New Users Click Here to Request Access</a>
             <a href="#support">Forgot password or problems logging in?</a>
           </div>
-          <div class="token-note">After the callback, the app displays the raw OIDC token payload, decoded ID token claims, UserInfo claims, and the requested business-field mappings.</div>
+          <div class="token-note">After the callback, the app displays the raw OIDC token payload, verified ID token claims, UserInfo claims, and the requested business-field mappings.</div>
           <div id="support" class="help">
             <strong>Problems logging in?</strong>
             Contact the BX-Health Help Desk at <a href="tel:18336914357">1-833-691-4357</a> or update the support block in <code>index.html</code> for your customer story.
@@ -347,6 +371,7 @@
           <div class="fine-print">Demo defaults assume <code>http://localhost:3010/auth/callback</code> as the redirect URI and can be pointed at a registration journey using environment variables for authIndex routing.</div>
         </div>
       </div>
+      <footer class="pane-footer">Epic and MyChart are registered trademarks of Epic Systems Corporation.</footer>
     </section>
     <aside class="visual-pane">
       <div class="visual-card">

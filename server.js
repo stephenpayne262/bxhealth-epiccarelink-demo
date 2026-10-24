@@ -11,6 +11,7 @@ const CONFIG = {
   redirectUri: process.env.REDIRECT_URI || `http://localhost:${PORT}/auth/callback`,
   scope: process.env.SCOPE || 'openid profile email',
   discoveryUrl: process.env.DISCOVERY_URL || 'https://openam-scp-1025.forgeblocks.com/am/oauth2/realms/root/realms/alpha/.well-known/openid-configuration',
+  jwksUri: process.env.JWKS_URI || '',
   authorizationEndpoint: process.env.AUTHORIZATION_ENDPOINT || 'https://openam-scp-1025.forgeblocks.com/am/oauth2/alpha/authorize',
   tokenEndpoint: process.env.TOKEN_ENDPOINT || 'https://openam-scp-1025.forgeblocks.com/am/oauth2/alpha/access_token',
   userInfoEndpoint: process.env.USERINFO_ENDPOINT || 'https://openam-scp-1025.forgeblocks.com/am/oauth2/alpha/userinfo',
@@ -69,15 +70,44 @@ async function resolveEndpoints() {
     authorizationEndpoint: discovery?.authorization_endpoint || CONFIG.authorizationEndpoint,
     tokenEndpoint: discovery?.token_endpoint || CONFIG.tokenEndpoint,
     userInfoEndpoint: discovery?.userinfo_endpoint || CONFIG.userInfoEndpoint,
+    jwksUri: discovery?.jwks_uri || CONFIG.jwksUri || null,
     issuer: discovery?.issuer || CONFIG.issuer,
     claimsSupported: discovery?.claims_supported || []
   };
 }
 
-function decodeJwt(token) {
-  if (!token || token.split('.').length < 2) return null;
-  const [, payload] = token.split('.');
-  return JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+const jwksCache = new Map();
+
+async function verifyIdToken(token, expectedNonce, endpoints, clientId) {
+  if (!token || !endpoints.jwksUri) {
+    throw new Error('ID token or JWKS URI is missing');
+  }
+
+  const { createRemoteJWKSet, jwtVerify } = await import('jose');
+  const jwksUrl = new URL(endpoints.jwksUri);
+  let jwks = jwksCache.get(jwksUrl.href);
+  if (!jwks) {
+    jwks = createRemoteJWKSet(jwksUrl);
+    jwksCache.set(jwksUrl.href, jwks);
+  }
+
+  const { payload } = await jwtVerify(token, jwks, {
+    issuer: endpoints.issuer,
+    audience: clientId,
+    algorithms: ['RS256', 'PS256', 'ES256'],
+    requiredClaims: ['iss', 'sub', 'aud', 'exp', 'iat'],
+    maxTokenAge: '10m',
+    clockTolerance: 5
+  });
+
+  if (payload.nonce !== expectedNonce) {
+    throw new Error('ID token nonce mismatch');
+  }
+  if (Array.isArray(payload.aud) && payload.aud.length > 1 && payload.azp !== clientId) {
+    throw new Error('ID token authorized party mismatch');
+  }
+
+  return payload;
 }
 
 function extractMappedClaims(claims = {}, userInfo = {}) {
@@ -113,17 +143,6 @@ function buildClaimsParameter() {
       phone_number: { essential: false }
     }
   });
-}
-
-async function exchangeCode(code, tokenEndpoint) {
-  const body = new URLSearchParams({
-    grant_type: 'authorization_code',
-    code,
-    redirect_uri: CONFIG.redirectUri,
-    client_id: getClientConfig('register').clientId,
-    code_verifier: ''
-  });
-  return body;
 }
 
 function renderResultPage({ flow, endpoints, tokenResponse, idTokenClaims, userInfo, mappedClaims, error }) {
@@ -181,7 +200,7 @@ pre { margin: 0; padding: 14px; background: var(--panel-soft); border: 1px solid
   <section class="hero">
     <div class="badge">OIDC ${escapeHtml(flow || 'login')} complete</div>
     <h1>BX-Health token viewer</h1>
-    <p>This page shows the raw token response, decoded ID token claims, optional UserInfo claims, and the business mappings you requested for the EpicCare-style demo app.</p>
+    <p>This page shows the raw token response, verified ID token claims, optional UserInfo claims, and the business mappings you requested for the EpicCare-style demo app.</p>
   </section>
   ${error ? `<div class="error">${escapeHtml(error)}</div>` : ''}
   <section class="grid">
@@ -207,7 +226,7 @@ pre { margin: 0; padding: 14px; background: var(--panel-soft); border: 1px solid
       <h2>OIDC payloads</h2>
       <h3>Token response</h3>
       <pre>${escapeHtml(payload || 'No token response captured.')}</pre>
-      <h3>Decoded ID token</h3>
+      <h3>Verified ID token</h3>
       <pre>${escapeHtml(idPayload || 'No ID token claims decoded.')}</pre>
       <h3>All ID token claims</h3>
       <table class="table">${allClaimRows || '<tr><th>Claims</th><td>No ID token claims decoded.</td></tr>'}</table>
@@ -319,7 +338,19 @@ async function handleCallback(req, res, requestUrl) {
     }));
   }
 
-  const idTokenClaims = decodeJwt(tokenResponse.id_token);
+  let idTokenClaims;
+  try {
+    idTokenClaims = await verifyIdToken(tokenResponse.id_token, session.nonce, endpoints, client.clientId);
+  } catch (err) {
+    console.warn('ID token validation failed:', err.message);
+    return send(res, 400, renderResultPage({
+      flow: session.flow,
+      endpoints,
+      mappedClaims: {},
+      error: 'ID token validation failed.'
+    }));
+  }
+
   let userInfo = null;
   if (tokenResponse.access_token && endpoints.userInfoEndpoint) {
     try {

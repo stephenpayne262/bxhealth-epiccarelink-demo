@@ -1,9 +1,12 @@
 {
   "name": "bx-health-epic-oidc-demo",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "private": true,
   "description": "BX-Health EpicCare-style OIDC demo for PingOne AIC",
   "scripts": {
     "start": "node server.js"
+  },
+  "dependencies": {
+    "jose": "^5.10.0"
   }
 }
