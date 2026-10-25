@@ -5,6 +5,7 @@ This package contains a lightweight local demo app that mimics the target EpicCa
 ## What it does
 - Renders an EpicCare-style login page branded for BX-Health
 - Shows the app version and Epic/MyChart trademark notice on the login page
+- Highlights the Epic Toolbox integration, external provider use case, and Marketplace/Showroom listings
 - Starts OIDC Authorization Code flow with PKCE from either:
   - `/auth/login`
   - `/auth/register`
@@ -15,6 +16,7 @@ This package contains a lightweight local demo app that mimics the target EpicCa
   - verified ID token claims
   - UserInfo claims
   - mapped business concepts: Email Address, Date of Birth, Zip Code, Full Name, Home Phone
+- After successful sign-in, shows a mock initial-password step before the token and claim dashboard. The password is only compared in the browser and is not sent or stored.
 
 ## Quick start
 1. Make sure the OIDC client allows this redirect URI:

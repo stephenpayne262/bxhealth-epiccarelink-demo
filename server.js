@@ -145,6 +145,333 @@ function buildClaimsParameter() {
   });
 }
 
+function serializeForInlineScript(value) {
+  return JSON.stringify(value).replace(/[<>&\u2028\u2029]/g, character =>
+    `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`
+  );
+}
+
+function renderPostLoginPage({ flow, tokenResponse, idTokenClaims, userInfo, mappedClaims }) {
+  const demoData = serializeForInlineScript({ flow, tokenResponse, idTokenClaims, userInfo, mappedClaims });
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EpicCare Link | BX-Health Demo</title>
+<style>
+:root {
+  --ink: #17324d;
+  --muted: #65788b;
+  --line: #dce5ec;
+  --paper: #ffffff;
+  --canvas: #f2f6f8;
+  --blue: #17618c;
+  --blue-dark: #103d61;
+  --blue-soft: #e9f2f7;
+  --green: #247149;
+  --green-soft: #e8f4ed;
+  --red: #a52b3a;
+  --shadow: 0 16px 40px rgba(24, 52, 77, 0.09);
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; min-height: 100vh; background: var(--canvas); color: var(--ink); font-family: Inter, Arial, sans-serif; }
+button, input { font: inherit; }
+.topbar { min-height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 12px clamp(18px, 5vw, 72px); background: var(--paper); border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: 12px; color: var(--ink); text-decoration: none; font-weight: 700; }
+.brand img { width: 38px; height: 38px; object-fit: contain; }
+.brand-name { display: grid; gap: 2px; }
+.brand-name small { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+.brand-name strong { font-size: 15px; }
+.topbar-actions { display: flex; align-items: center; gap: 14px; }
+.demo-label { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.top-link { color: var(--blue); font-size: 13px; font-weight: 700; text-decoration: none; }
+.top-link:hover { text-decoration: underline; }
+.setup-wrap { width: min(100% - 32px, 760px); margin: 34px auto 56px; }
+.setup-banner { position: relative; min-height: 108px; display: grid; place-items: center; overflow: hidden; border: 1px solid #dbe5eb; border-radius: 14px; background-color: #f9fbfc; background-image: radial-gradient(circle at 20px 22px, rgba(23, 97, 140, 0.07) 1px, transparent 2px), radial-gradient(circle at 52px 46px, rgba(23, 97, 140, 0.05) 1px, transparent 2px); background-size: 70px 64px; }
+.lock-mark { position: relative; width: 46px; height: 36px; margin-top: 18px; border-radius: 9px; background: #f2b528; box-shadow: 0 8px 16px rgba(147, 108, 17, 0.2); }
+.lock-mark::before { content: ""; position: absolute; left: 12px; top: -20px; width: 20px; height: 24px; border: 5px solid #d4dee6; border-bottom: 0; border-radius: 15px 15px 0 0; }
+.lock-mark::after { content: ""; position: absolute; left: 21px; top: 12px; width: 4px; height: 11px; border-radius: 3px; background: var(--blue-dark); }
+.verified-banner { display: flex; align-items: center; gap: 9px; margin: 22px 0 24px; padding: 12px 14px; border: 1px solid #cce4d4; border-radius: 7px; background: var(--green-soft); color: var(--green); font-size: 13px; font-weight: 700; }
+.check-mark { width: 18px; height: 18px; display: grid; place-items: center; flex: 0 0 18px; border-radius: 50%; background: var(--green); color: #fff; font-size: 12px; }
+.setup-content { width: min(100%, 480px); margin: 0 auto; padding: 0 8px; }
+.eyebrow { margin: 0 0 9px; color: var(--blue); font-size: 11px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
+h1 { margin: 0 0 9px; color: var(--ink); font-size: 27px; line-height: 1.18; }
+.intro { margin: 0 0 19px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+.identity-line { margin: -5px 0 20px; padding: 10px 12px; border-left: 3px solid #8bb6ce; background: #edf4f7; color: #3d5b70; font-size: 13px; overflow-wrap: anywhere; }
+.field { margin: 0 0 15px; }
+.field label { display: block; margin-bottom: 6px; color: var(--ink); font-size: 13px; font-weight: 700; }
+.field input { width: 100%; height: 44px; padding: 0 12px; border: 1px solid #bdcbd5; border-radius: 6px; background: #fff; color: var(--ink); font-size: 14px; }
+.field input:focus { border-color: var(--blue); outline: 3px solid rgba(23, 97, 140, 0.13); }
+.field-hint { margin: 6px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.form-error { min-height: 20px; margin: 4px 0 7px; color: var(--red); font-size: 12px; }
+.primary-action { width: 100%; min-height: 44px; border: 0; border-radius: 5px; background: var(--blue); color: #fff; font-size: 14px; font-weight: 700; cursor: pointer; }
+.primary-action:hover { background: var(--blue-dark); }
+.primary-action:focus-visible, .copy-button:focus-visible, .top-link:focus-visible { outline: 3px solid #78aeca; outline-offset: 2px; }
+.fine-note { margin: 16px 0 0; color: #758696; font-size: 11px; line-height: 1.55; }
+.fine-note strong { color: #526a7d; }
+.demo-footer { margin-top: 28px; padding-top: 13px; border-top: 1px solid var(--line); color: #8392a0; font-size: 11px; text-align: center; }
+.dashboard-wrap { width: min(100% - 32px, 1160px); margin: 30px auto 60px; }
+.welcome-panel { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 24px; padding: 26px 30px; border-radius: 12px; background: var(--blue-dark); color: #fff; }
+.welcome-panel .eyebrow { color: #a9d0e2; }
+.welcome-panel h1 { color: #fff; font-size: 30px; }
+.welcome-panel p { max-width: 64ch; margin: 8px 0 0; color: #e3eef4; font-size: 14px; line-height: 1.6; }
+.section { margin-top: 22px; }
+.section-heading { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+.section-heading h2 { margin: 0; font-size: 18px; }
+.section-heading p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+.profile-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.profile-item, .token-card, .claims-panel { min-width: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); box-shadow: var(--shadow); }
+.profile-item { padding: 14px; }
+.profile-item dt { margin-bottom: 7px; color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; }
+.profile-item dd { margin: 0; color: var(--ink); font-size: 14px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.token-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.token-card { padding: 15px; }
+.token-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.token-head h3 { margin: 0; font-size: 14px; }
+.copy-button { min-height: 34px; padding: 0 11px; border: 1px solid #a9c2d1; border-radius: 5px; background: #f5fafc; color: var(--blue-dark); font-size: 12px; font-weight: 700; cursor: pointer; }
+.copy-button:hover { background: var(--blue-soft); }
+.copy-status { min-height: 17px; margin: 6px 0 0; color: var(--green); font-size: 11px; }
+.token-details { margin-top: 7px; }
+.token-details summary { color: var(--blue); font-size: 12px; cursor: pointer; }
+.token-raw { max-height: 180px; margin: 8px 0 0; padding: 10px; overflow: auto; border-radius: 5px; background: #f2f6f8; color: #244258; font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; white-space: pre-wrap; }
+.claims-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.claims-panel { padding: 18px; }
+.claims-panel h3 { margin: 0 0 12px; font-size: 15px; }
+.claim-list { display: grid; grid-template-columns: minmax(100px, 0.7fr) minmax(0, 1.3fr); gap: 0 14px; margin: 0; }
+.claim-list dt, .claim-list dd { padding: 9px 0; border-bottom: 1px solid #edf1f4; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; white-space: pre-wrap; }
+.claim-list dt { color: var(--muted); font-weight: 700; }
+.claim-list dd { margin: 0; color: var(--ink); }
+.empty-state { color: var(--muted); font-size: 13px; }
+@media (max-width: 740px) {
+  .topbar { padding: 12px 16px; }
+  .demo-label { display: none; }
+  .setup-wrap { margin-top: 20px; }
+  .welcome-panel { align-items: flex-start; flex-direction: column; padding: 22px; }
+  .profile-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .token-grid, .claims-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 440px) {
+  .brand img { width: 32px; height: 32px; }
+  .brand-name strong { font-size: 13px; }
+  .top-link { font-size: 12px; }
+  h1 { font-size: 23px; }
+  .profile-grid { grid-template-columns: 1fr; }
+  .claim-list { grid-template-columns: 1fr; }
+  .claim-list dd { padding-top: 0; }
+}
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="BX-Health demo home">
+      <img src="https://demo.bxindustry.org/health/logo.svg" alt="" />
+      <span class="brand-name"><small>BX-Health demo</small><strong>EpicCare Link</strong></span>
+    </a>
+    <div class="topbar-actions">
+      <span class="demo-label">Epic Toolbox integration</span>
+      <a class="top-link" href="/">Exit demo</a>
+    </div>
+  </header>
+  <main>
+    <section class="setup-wrap" id="password-step" aria-labelledby="setup-title">
+      <div class="setup-banner" aria-hidden="true"><span class="lock-mark"></span></div>
+      <div class="verified-banner"><span class="check-mark" aria-hidden="true">&#10003;</span><span>Your identity was successfully verified with Ping.</span></div>
+      <div class="setup-content">
+        <p class="eyebrow">EpicCare Link | Initial account setup</p>
+        <h1 id="setup-title">Choose an initial password</h1>
+        <p class="intro">Your provider identity is verified. Set a password for this mock EpicCare Link experience.</p>
+        <p class="identity-line" id="provider-identity">Verified external provider</p>
+        <form id="password-form" novalidate>
+          <div class="field">
+            <label for="initial-password">Password</label>
+            <input id="initial-password" type="password" minlength="4" maxlength="256" autocomplete="new-password" required />
+            <p class="field-hint">Use between 4 and 256 characters.</p>
+          </div>
+          <div class="field">
+            <label for="confirm-password">Confirm password</label>
+            <input id="confirm-password" type="password" minlength="4" maxlength="256" autocomplete="new-password" required />
+          </div>
+          <p class="form-error" id="password-error" role="alert" aria-live="polite"></p>
+          <button class="primary-action" type="submit">Continue to EpicCare Link</button>
+        </form>
+        <p class="fine-note"><strong>Epic Toolbox demo:</strong> Identity proofing and orchestration do not set or manage an Epic password. This mock checks that the entries match, then discards them without sending or saving either value.</p>
+        <p class="demo-footer">Demonstration only | No Epic account changes are made</p>
+      </div>
+    </section>
+
+    <section class="dashboard-wrap" id="provider-dashboard" aria-labelledby="dashboard-title" tabindex="-1" hidden>
+      <header class="welcome-panel">
+        <div>
+          <p class="eyebrow">EpicCare Link | Provider workspace</p>
+          <h1 id="dashboard-title">Your demo workspace is ready</h1>
+          <p>Identity verification completed through Ping. The profile and OIDC data below are provided for this customer demonstration.</p>
+        </div>
+        <a class="top-link" href="/" style="color:#fff">End demo</a>
+      </header>
+      <section class="section" aria-labelledby="profile-heading">
+        <div class="section-heading"><div><h2 id="profile-heading">Verified provider profile</h2><p>Business-friendly identity fields mapped from the verified claims.</p></div></div>
+        <dl class="profile-grid" id="mapped-claims"></dl>
+      </section>
+      <section class="section" aria-labelledby="tokens-heading">
+        <div class="section-heading"><div><h2 id="tokens-heading">Session tokens</h2><p>Raw token values are shown for demonstration only. Use a copy button to copy an individual token.</p></div></div>
+        <div class="token-grid" id="token-list"></div>
+      </section>
+      <section class="section claims-grid" aria-label="All identity claims">
+        <article class="claims-panel"><h3>ID token claims</h3><dl class="claim-list" id="id-claims"></dl></article>
+        <article class="claims-panel"><h3>UserInfo claims</h3><dl class="claim-list" id="userinfo-claims"></dl></article>
+      </section>
+      <p class="demo-footer">Demonstration only | Tokens and claims are not stored by this page</p>
+    </section>
+  </main>
+  <script>
+    const demoData = ${demoData};
+    const passwordForm = document.getElementById('password-form');
+    const passwordInput = document.getElementById('initial-password');
+    const confirmInput = document.getElementById('confirm-password');
+    const passwordError = document.getElementById('password-error');
+    const passwordStep = document.getElementById('password-step');
+    const dashboard = document.getElementById('provider-dashboard');
+
+    function formatValue(value) {
+      if (typeof value === 'string') return value;
+      if (value === null || value === undefined) return '';
+      return JSON.stringify(value, null, 2);
+    }
+
+    function addClaimRows(targetId, claims) {
+      const target = document.getElementById(targetId);
+      const entries = Object.entries(claims || {});
+      if (!entries.length) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-state';
+        empty.textContent = 'No claims returned.';
+        target.appendChild(empty);
+        return;
+      }
+      entries.forEach(function(entry) {
+        const term = document.createElement('dt');
+        const detail = document.createElement('dd');
+        term.textContent = entry[0];
+        detail.textContent = formatValue(entry[1]);
+        target.append(term, detail);
+      });
+    }
+
+    function addProfileItems(claims) {
+      const target = document.getElementById('mapped-claims');
+      Object.entries(claims || {}).forEach(function(entry) {
+        const item = document.createElement('div');
+        const term = document.createElement('dt');
+        const detail = document.createElement('dd');
+        item.className = 'profile-item';
+        term.textContent = entry[0];
+        detail.textContent = formatValue(entry[1]) || 'Not provided';
+        item.append(term, detail);
+        target.appendChild(item);
+      });
+    }
+
+    function copyToken(value) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(value);
+      }
+      const temporaryInput = document.createElement('textarea');
+      temporaryInput.value = value;
+      temporaryInput.setAttribute('readonly', '');
+      temporaryInput.style.position = 'fixed';
+      temporaryInput.style.opacity = '0';
+      document.body.appendChild(temporaryInput);
+      temporaryInput.select();
+      const copied = document.execCommand('copy');
+      temporaryInput.remove();
+      return copied ? Promise.resolve() : Promise.reject(new Error('Clipboard unavailable'));
+    }
+
+    function addTokenCards(tokenResponse) {
+      const target = document.getElementById('token-list');
+      const tokens = Object.entries(tokenResponse || {}).filter(function(entry) {
+        return /token$/i.test(entry[0]) && typeof entry[1] === 'string' && entry[1].length > 0;
+      });
+      if (!tokens.length) {
+        const empty = document.createElement('p');
+        empty.className = 'empty-state';
+        empty.textContent = 'No raw tokens returned.';
+        target.appendChild(empty);
+        return;
+      }
+      tokens.forEach(function(entry) {
+        const card = document.createElement('article');
+        const header = document.createElement('div');
+        const title = document.createElement('h3');
+        const button = document.createElement('button');
+        const status = document.createElement('p');
+        const details = document.createElement('details');
+        const summary = document.createElement('summary');
+        const raw = document.createElement('pre');
+        card.className = 'token-card';
+        header.className = 'token-head';
+        title.textContent = entry[0].replace(/_/g, ' ').replace(/\b\w/g, function(letter) { return letter.toUpperCase(); });
+        button.className = 'copy-button';
+        button.type = 'button';
+        button.textContent = 'Copy raw token';
+        status.className = 'copy-status';
+        status.setAttribute('aria-live', 'polite');
+        summary.textContent = 'View raw token';
+        raw.className = 'token-raw';
+        raw.textContent = entry[1];
+        button.addEventListener('click', function() {
+          copyToken(entry[1]).then(function() {
+            status.textContent = 'Copied to clipboard';
+          }).catch(function() {
+            status.textContent = 'Unable to access clipboard in this browser';
+          });
+        });
+        details.className = 'token-details';
+        details.append(summary, raw);
+        header.append(title, button);
+        card.append(header, status, details);
+        target.appendChild(card);
+      });
+    }
+
+    const identity = demoData.mappedClaims['Full Name'] || demoData.mappedClaims['Email Address'] || demoData.idTokenClaims.email || demoData.idTokenClaims.sub || 'Verified external provider';
+    document.getElementById('provider-identity').textContent = 'Verified provider: ' + formatValue(identity);
+
+    passwordForm.addEventListener('submit', function(event) {
+      event.preventDefault();
+      passwordError.textContent = '';
+      const password = passwordInput.value;
+      const confirmation = confirmInput.value;
+      if (password.length < 4 || password.length > 256) {
+        passwordError.textContent = 'Use a password between 4 and 256 characters.';
+        passwordInput.focus();
+        return;
+      }
+      if (password !== confirmation) {
+        passwordError.textContent = 'The passwords do not match. Please try again.';
+        confirmInput.focus();
+        return;
+      }
+
+      passwordInput.value = '';
+      confirmInput.value = '';
+      addProfileItems(demoData.mappedClaims);
+      addTokenCards(demoData.tokenResponse);
+      addClaimRows('id-claims', demoData.idTokenClaims);
+      addClaimRows('userinfo-claims', demoData.userInfo);
+      passwordStep.hidden = true;
+      dashboard.hidden = false;
+      dashboard.focus();
+      window.scrollTo(0, 0);
+    });
+  </script>
+</body>
+</html>`;
+}
+
 function renderResultPage({ flow, endpoints, tokenResponse, idTokenClaims, userInfo, mappedClaims, error }) {
   const payload = tokenResponse ? JSON.stringify(tokenResponse, null, 2) : '';
   const idPayload = idTokenClaims ? JSON.stringify(idTokenClaims, null, 2) : '';
@@ -364,9 +691,8 @@ async function handleCallback(req, res, requestUrl) {
   }
 
   const mappedClaims = extractMappedClaims(idTokenClaims, userInfo);
-  return send(res, 200, renderResultPage({
+  return send(res, 200, renderPostLoginPage({
     flow: session.flow,
-    endpoints,
     tokenResponse,
     idTokenClaims,
     userInfo,

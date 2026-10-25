@@ -70,7 +70,7 @@
       display: block;
     }
     .product-chip {
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 700;
       letter-spacing: 0.08em;
       text-transform: uppercase;
@@ -104,6 +104,7 @@
       margin: 0 0 6px;
       color: var(--artifact-primary-highlight);
     }
+    .login-title { font-size: 27px; }
     .subhead {
       font-size: 14px;
       line-height: 1.55;
@@ -284,6 +285,29 @@
       border: 1px solid rgba(255,255,255,0.16);
       width: fit-content;
     }
+    .resource-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 24px;
+      margin-top: 26px;
+      padding-top: 18px;
+      border-top: 1px solid rgba(255,255,255,0.24);
+    }
+    .resource-link {
+      display: grid;
+      gap: 4px;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.4;
+      text-decoration: none;
+    }
+    .resource-link span {
+      color: #d9eaf3;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .resource-link:hover { text-decoration: underline; }
     .token-note {
       margin-top: 14px;
       padding: 10px 12px;
@@ -303,6 +327,13 @@
       .visual-pane { min-height: 320px; padding: 28px; }
       .login-pane { min-height: auto; }
       .visual-card h2 { font-size: 34px; }
+    }
+    @media (max-width: 480px) {
+      .login-pane { padding: 22px 18px; }
+      .top-brand { align-items: flex-start; }
+      .product-chip { max-width: 150px; text-align: right; }
+      .login-title { font-size: 24px; }
+      .link-row { align-items: flex-start; flex-direction: column; }
     }
     @media print {
       body {
@@ -339,13 +370,13 @@
         <div class="top-brand">
           <img src="https://demo.bxindustry.org/health/logo.svg" alt="BX-Health logo" />
           <div class="product-mark">
-            <div class="product-chip">EpicCare Style Demo</div>
-            <span class="app-version">Version 1.0.5</span>
+            <div class="product-chip">Epic Toolbox Integration</div>
+            <span class="app-version">Version 1.0.6</span>
           </div>
         </div>
         <div class="card">
-          <h1>EpicCare Link</h1>
-          <p class="subhead">BX-Health external provider access demo with PingOne Advanced Identity Cloud and OIDC authorization code flow.</p>
+          <h1 class="login-title">Mock EpicCare Link Demo Application</h1>
+          <p class="subhead">A customer demonstration of verified onboarding and account recovery for external providers.</p>
           <div class="field">
             <label for="user">User ID</label>
             <input id="user" type="text" placeholder="Enter your user ID" />
@@ -363,7 +394,7 @@
             <a href="/auth/register">New Users Click Here to Request Access</a>
             <a href="#support">Forgot password or problems logging in?</a>
           </div>
-          <div class="token-note">After the callback, the app displays the raw OIDC token payload, verified ID token claims, UserInfo claims, and the requested business-field mappings.</div>
+          <div class="token-note">After Ping verifies your identity, this demo shows a mock initial-password step, then a provider workspace with the returned tokens and claims.</div>
           <div id="support" class="help">
             <strong>Problems logging in?</strong>
             Contact the BX-Health Help Desk at <a href="tel:18336914357">1-833-691-4357</a> or update the support block in <code>index.html</code> for your customer story.
@@ -376,14 +407,18 @@
     <aside class="visual-pane">
       <div class="visual-card">
         <img src="https://demo.bxindustry.org/health/logo.svg" alt="BX-Health white logo" />
-        <div class="eyebrow">Ping + BX-Health</div>
-        <h2>Patient and provider access that feels familiar.</h2>
-        <p>This demo borrows the layout cues of the target EpicCare Link page, then swaps in BX-Health branding, a cleaner modern login surface, and live PingOne AIC OIDC sign-in and registration entry points.</p>
+        <div class="eyebrow">Epic Toolbox Integration</div>
+        <h2>Verified onboarding for external providers.</h2>
+        <p>IAL-2 verified onboarding and account recovery using strong identity proofing for your external providers, orchestrated to meet your business requirements.</p>
         <div class="feature-list">
-          <span>Authorization Code flow with PKCE + state</span>
-          <span>Configurable registration journey routing</span>
-          <span>Token and claim viewer after callback</span>
+          <span>IAL-2 identity proofing</span>
+          <span>Provider onboarding and account recovery</span>
+          <span>Business-aligned identity orchestration</span>
         </div>
+        <nav class="resource-links" aria-label="Integration resources">
+          <a class="resource-link" href="https://marketplace.pingone.com/item/epiccarelink" target="_blank" rel="noopener noreferrer">PingOne Marketplace<span>View the integration listing</span></a>
+          <a class="resource-link" href="https://showroom.epic.com/listing?id=3821&amp;returntitle=6" target="_blank" rel="noopener noreferrer">Epic Showroom<span>View the Epic listing</span></a>
+        </nav>
       </div>
     </aside>
   </main>
