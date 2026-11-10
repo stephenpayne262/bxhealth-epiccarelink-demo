@@ -12,12 +12,16 @@ const CONFIG = {
   scope: process.env.SCOPE || 'openid profile email',
   discoveryUrl: process.env.DISCOVERY_URL || 'https://openam-scp-1025.forgeblocks.com/am/oauth2/realms/root/realms/alpha/.well-known/openid-configuration',
   jwksUri: process.env.JWKS_URI || '',
+  endSessionEndpoint: process.env.END_SESSION_ENDPOINT || '',
+  postLogoutRedirectUri: process.env.POST_LOGOUT_REDIRECT_URI || `${new URL(process.env.REDIRECT_URI || `http://localhost:${PORT}/auth/callback`).origin}/`,
   authorizationEndpoint: process.env.AUTHORIZATION_ENDPOINT || 'https://openam-scp-1025.forgeblocks.com/am/oauth2/alpha/authorize',
   tokenEndpoint: process.env.TOKEN_ENDPOINT || 'https://openam-scp-1025.forgeblocks.com/am/oauth2/alpha/access_token',
   userInfoEndpoint: process.env.USERINFO_ENDPOINT || 'https://openam-scp-1025.forgeblocks.com/am/oauth2/alpha/userinfo',
   issuer: process.env.ISSUER || 'https://openam-scp-1025.forgeblocks.com:443/am/oauth2/realms/root/realms/alpha',
   registerAuthIndexType: process.env.AIC_REGISTER_AUTH_INDEX_TYPE || '',
-  registerAuthIndexValue: process.env.AIC_REGISTER_AUTH_INDEX_VALUE || ''
+  registerAuthIndexValue: process.env.AIC_REGISTER_AUTH_INDEX_VALUE || '',
+  recoverAuthIndexType: process.env.AIC_RECOVER_AUTH_INDEX_TYPE || '',
+  recoverAuthIndexValue: process.env.AIC_RECOVER_AUTH_INDEX_VALUE || ''
 };
 
 function getClientConfig(flow) {
@@ -71,6 +75,7 @@ async function resolveEndpoints() {
     tokenEndpoint: discovery?.token_endpoint || CONFIG.tokenEndpoint,
     userInfoEndpoint: discovery?.userinfo_endpoint || CONFIG.userInfoEndpoint,
     jwksUri: discovery?.jwks_uri || CONFIG.jwksUri || null,
+    endSessionEndpoint: discovery?.end_session_endpoint || CONFIG.endSessionEndpoint || null,
     issuer: discovery?.issuer || CONFIG.issuer,
     claimsSupported: discovery?.claims_supported || []
   };
@@ -153,6 +158,13 @@ function serializeForInlineScript(value) {
 
 function renderPostLoginPage({ flow, tokenResponse, idTokenClaims, userInfo, mappedClaims }) {
   const demoData = serializeForInlineScript({ flow, tokenResponse, idTokenClaims, userInfo, mappedClaims });
+  const needsPasswordStep = flow === 'register' || flow === 'recover';
+  const passwordStepEyebrow = flow === 'recover' ? 'EpicCare Link | Account recovery' : 'EpicCare Link | Initial account setup';
+  const passwordStepTitle = flow === 'recover' ? 'Reset your EpicCare Link Password' : 'Choose an initial password';
+  const passwordStepIntro = flow === 'recover'
+    ? 'Your provider identity is verified. Set a new password for this mock EpicCare Link experience.'
+    : 'Your provider identity is verified. Set a password for this mock EpicCare Link experience.';
+  const passwordStepAction = flow === 'recover' ? 'Reset EpicCare Link password' : 'Continue to EpicCare Link';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -188,6 +200,8 @@ button, input { font: inherit; }
 .topbar-actions { display: flex; align-items: center; gap: 14px; }
 .demo-label { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
 .top-link { color: var(--blue); font-size: 13px; font-weight: 700; text-decoration: none; }
+.logout-form { display: inline-flex; margin: 0; }
+.logout-button { padding: 0; border: 0; background: none; cursor: pointer; }
 .top-link:hover { text-decoration: underline; }
 .setup-wrap { width: min(100% - 32px, 760px); margin: 34px auto 56px; }
 .setup-banner { position: relative; min-height: 108px; display: grid; place-items: center; overflow: hidden; border: 1px solid #dbe5eb; border-radius: 14px; background-color: #f9fbfc; background-image: radial-gradient(circle at 20px 22px, rgba(23, 97, 140, 0.07) 1px, transparent 2px), radial-gradient(circle at 52px 46px, rgba(23, 97, 140, 0.05) 1px, transparent 2px); background-size: 70px 64px; }
@@ -272,17 +286,20 @@ h1 { margin: 0 0 9px; color: var(--ink); font-size: 27px; line-height: 1.18; }
     </a>
     <div class="topbar-actions">
       <span class="demo-label">Epic Toolbox integration</span>
-      <a class="top-link" href="/">Exit demo</a>
+      <form class="logout-form" action="/auth/logout" method="post">
+        <input type="hidden" name="id_token_hint" value="${escapeHtml(tokenResponse.id_token || '')}" />
+        <button class="top-link logout-button" type="submit">Logout</button>
+      </form>
     </div>
   </header>
   <main>
-    <section class="setup-wrap" id="password-step" aria-labelledby="setup-title">
+    <section class="setup-wrap" id="password-step" aria-labelledby="setup-title"${needsPasswordStep ? '' : ' hidden'}>
       <div class="setup-banner" aria-hidden="true"><span class="lock-mark"></span></div>
       <div class="verified-banner"><span class="check-mark" aria-hidden="true">&#10003;</span><span>Your identity was successfully verified with Ping.</span></div>
       <div class="setup-content">
-        <p class="eyebrow">EpicCare Link | Initial account setup</p>
-        <h1 id="setup-title">Choose an initial password</h1>
-        <p class="intro">Your provider identity is verified. Set a password for this mock EpicCare Link experience.</p>
+        <p class="eyebrow">${passwordStepEyebrow}</p>
+        <h1 id="setup-title">${passwordStepTitle}</h1>
+        <p class="intro">${passwordStepIntro}</p>
         <p class="identity-line" id="provider-identity">Verified external provider</p>
         <form id="password-form" novalidate>
           <div class="field">
@@ -295,21 +312,24 @@ h1 { margin: 0 0 9px; color: var(--ink); font-size: 27px; line-height: 1.18; }
             <input id="confirm-password" type="password" minlength="4" maxlength="256" autocomplete="new-password" required />
           </div>
           <p class="form-error" id="password-error" role="alert" aria-live="polite"></p>
-          <button class="primary-action" type="submit">Continue to EpicCare Link</button>
+          <button class="primary-action" type="submit">${passwordStepAction}</button>
         </form>
         <p class="fine-note"><strong>Epic Toolbox demo:</strong> Identity proofing and orchestration do not set or manage an Epic password. This mock checks that the entries match, then discards them without sending or saving either value.</p>
         <p class="demo-footer">Demonstration only | No Epic account changes are made</p>
       </div>
     </section>
 
-    <section class="dashboard-wrap" id="provider-dashboard" aria-labelledby="dashboard-title" tabindex="-1" hidden>
+    <section class="dashboard-wrap" id="provider-dashboard" aria-labelledby="dashboard-title" tabindex="-1"${needsPasswordStep ? ' hidden' : ''}>
       <header class="welcome-panel">
         <div>
           <p class="eyebrow">EpicCare Link | Provider workspace</p>
           <h1 id="dashboard-title">Your demo workspace is ready</h1>
           <p>Identity verification completed through Ping. The profile and OIDC data below are provided for this customer demonstration.</p>
         </div>
-        <a class="top-link" href="/" style="color:#fff">End demo</a>
+        <form class="logout-form" action="/auth/logout" method="post">
+          <input type="hidden" name="id_token_hint" value="${escapeHtml(tokenResponse.id_token || '')}" />
+          <button class="top-link logout-button" type="submit" style="color:#fff">Logout</button>
+        </form>
       </header>
       <section class="section" aria-labelledby="profile-heading">
         <div class="section-heading"><div><h2 id="profile-heading">Verified provider profile</h2><p>Business-friendly identity fields mapped from the verified claims.</p></div></div>
@@ -334,6 +354,17 @@ h1 { margin: 0 0 9px; color: var(--ink); font-size: 27px; line-height: 1.18; }
     const passwordError = document.getElementById('password-error');
     const passwordStep = document.getElementById('password-step');
     const dashboard = document.getElementById('provider-dashboard');
+
+    function showDashboard() {
+      addProfileItems(demoData.mappedClaims);
+      addTokenCards(demoData.tokenResponse);
+      addClaimRows('id-claims', demoData.idTokenClaims);
+      addClaimRows('userinfo-claims', demoData.userInfo);
+      passwordStep.hidden = true;
+      dashboard.hidden = false;
+      dashboard.focus();
+      window.scrollTo(0, 0);
+    }
 
     function formatValue(value) {
       if (typeof value === 'string') return value;
@@ -458,15 +489,10 @@ h1 { margin: 0 0 9px; color: var(--ink); font-size: 27px; line-height: 1.18; }
 
       passwordInput.value = '';
       confirmInput.value = '';
-      addProfileItems(demoData.mappedClaims);
-      addTokenCards(demoData.tokenResponse);
-      addClaimRows('id-claims', demoData.idTokenClaims);
-      addClaimRows('userinfo-claims', demoData.userInfo);
-      passwordStep.hidden = true;
-      dashboard.hidden = false;
-      dashboard.focus();
-      window.scrollTo(0, 0);
+      showDashboard();
     });
+
+    if (demoData.flow === 'login') showDashboard();
   </script>
 </body>
 </html>`;
@@ -587,14 +613,56 @@ async function handleAuthorize(req, res, flow) {
   url.searchParams.set('code_challenge_method', 'S256');
   url.searchParams.set('claims', buildClaimsParameter());
 
-  const authIndexType = flow === 'register' ? CONFIG.registerAuthIndexType : '';
-  const authIndexValue = flow === 'register' ? CONFIG.registerAuthIndexValue : '';
+  const authIndexType = flow === 'register'
+    ? CONFIG.registerAuthIndexType
+    : flow === 'recover' ? CONFIG.recoverAuthIndexType : '';
+  const authIndexValue = flow === 'register'
+    ? CONFIG.registerAuthIndexValue
+    : flow === 'recover' ? CONFIG.recoverAuthIndexValue : '';
   if (authIndexType && authIndexValue) {
     url.searchParams.set('authIndexType', authIndexType);
     url.searchParams.set('authIndexValue', authIndexValue);
   }
 
   res.writeHead(302, { Location: url.toString() });
+  res.end();
+}
+
+async function handleLogout(req, res) {
+  if (req.method !== 'POST') {
+    res.writeHead(405, { Allow: 'POST' });
+    return res.end('Method not allowed');
+  }
+
+  const chunks = [];
+  let bodySize = 0;
+  for await (const chunk of req) {
+    bodySize += chunk.length;
+    if (bodySize > 65536) {
+      return send(res, 413, 'Logout request is too large.', 'text/plain; charset=utf-8');
+    }
+    chunks.push(chunk);
+  }
+
+  const form = new URLSearchParams(Buffer.concat(chunks).toString('utf8'));
+  const idTokenHint = form.get('id_token_hint');
+  if (!idTokenHint) {
+    return send(res, 400, 'ID token hint is required for logout.', 'text/plain; charset=utf-8');
+  }
+
+  const endpoints = await resolveEndpoints();
+  if (!endpoints.endSessionEndpoint) {
+    return send(res, 503, 'Ping end-session endpoint is unavailable. Configure END_SESSION_ENDPOINT.', 'text/plain; charset=utf-8');
+  }
+
+  const url = new URL(endpoints.endSessionEndpoint);
+  url.searchParams.set('id_token_hint', idTokenHint);
+  url.searchParams.set('client_id', CONFIG.clientId);
+  url.searchParams.set('post_logout_redirect_uri', CONFIG.postLogoutRedirectUri);
+  res.writeHead(302, {
+    Location: url.toString(),
+    'Cache-Control': 'no-store'
+  });
   res.end();
 }
 
@@ -706,6 +774,8 @@ const server = http.createServer(async (req, res) => {
   if (requestUrl.pathname === '/') return send(res, 200, indexHtml);
   if (requestUrl.pathname === '/auth/login') return handleAuthorize(req, res, 'login');
   if (requestUrl.pathname === '/auth/register') return handleAuthorize(req, res, 'register');
+  if (requestUrl.pathname === '/auth/recover') return handleAuthorize(req, res, 'recover');
+  if (requestUrl.pathname === '/auth/logout') return handleLogout(req, res);
   if (requestUrl.pathname === '/auth/callback') return handleCallback(req, res, requestUrl);
   if (requestUrl.pathname === '/health') return send(res, 200, JSON.stringify({ status: 'ok' }), 'application/json');
 

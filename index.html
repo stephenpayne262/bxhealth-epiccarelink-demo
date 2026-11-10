@@ -111,38 +111,6 @@
       color: var(--artifact-text-secondary);
       margin: 0 0 22px;
     }
-    .field {
-      margin-bottom: 14px;
-    }
-    label {
-      display: block;
-      font-size: 13px;
-      font-weight: 600;
-      margin-bottom: 6px;
-      color: var(--artifact-text-primary);
-    }
-    input {
-      width: 100%;
-      padding: 13px 14px;
-      border-radius: 10px;
-      border: 1px solid var(--artifact-border-dark);
-      background: var(--artifact-background);
-      color: var(--artifact-text-primary);
-      font-size: 14px;
-      outline: none;
-      transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
-    }
-    input:focus {
-      border-color: var(--artifact-primary-brand);
-      box-shadow: 0 0 0 3px var(--artifact-selected);
-      transform: translateY(-1px);
-    }
-    .hint {
-      font-size: 12px;
-      line-height: 1.5;
-      color: var(--artifact-text-secondary);
-      margin: 2px 0 0;
-    }
     .actions {
       display: grid;
       gap: 12px;
@@ -371,30 +339,18 @@
           <img src="https://demo.bxindustry.org/health/logo.svg" alt="BX-Health logo" />
           <div class="product-mark">
             <div class="product-chip">Epic Toolbox Integration</div>
-            <span class="app-version">Version 1.0.6</span>
+            <span class="app-version">Version 1.0.9</span>
           </div>
         </div>
         <div class="card">
           <h1 class="login-title">Mock EpicCare Link Demo Application</h1>
           <p class="subhead">A customer demonstration of verified onboarding and account recovery for external providers.</p>
-          <div class="field">
-            <label for="user">User ID</label>
-            <input id="user" type="text" placeholder="Enter your user ID" />
-          </div>
-          <div class="field">
-            <label for="pass">Password</label>
-            <input id="pass" type="password" placeholder="Enter your password" />
-            <p class="hint">Classic fields are visual only in this demo. Use the Ping buttons below to start the live OIDC flow.</p>
-          </div>
           <div class="actions">
-            <a class="btn btn-primary" href="/auth/login">Sign in with Ping</a>
-            <a class="btn btn-secondary" href="/auth/register">Register with Ping</a>
+            <a class="btn btn-primary" href="/auth/register">Register with Ping</a>
+            <a class="btn btn-secondary" href="/auth/login">Sign in with Ping</a>
+            <a class="btn btn-secondary" href="/auth/recover">Recover Account with Ping</a>
           </div>
-          <div class="link-row">
-            <a href="/auth/register">New Users Click Here to Request Access</a>
-            <a href="#support">Forgot password or problems logging in?</a>
-          </div>
-          <div class="token-note">After Ping verifies your identity, this demo shows a mock initial-password step, then a provider workspace with the returned tokens and claims.</div>
+          <div class="token-note">Register and account recovery include a mock password step. Sign-in goes directly to the provider workspace after Ping verifies your identity.</div>
           <div id="support" class="help">
             <strong>Problems logging in?</strong>
             Contact the BX-Health Help Desk at <a href="tel:18336914357">1-833-691-4357</a> or update the support block in <code>index.html</code> for your customer story.

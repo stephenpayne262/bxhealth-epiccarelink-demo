@@ -6,21 +6,24 @@ This package contains a lightweight local demo app that mimics the target EpicCa
 - Renders an EpicCare-style login page branded for BX-Health
 - Shows the app version and Epic/MyChart trademark notice on the login page
 - Highlights the Epic Toolbox integration, external provider use case, and Marketplace/Showroom listings
-- Starts OIDC Authorization Code flow with PKCE from either:
+- Starts OIDC Authorization Code flow with PKCE from:
   - `/auth/login`
   - `/auth/register`
+  - `/auth/recover`
 - Supports optional AIC authIndex routing so the Register button can target a registration journey
+- Logs out through the OIDC provider end-session endpoint to clear the AIC browser session
 - Exchanges the authorization code server-side
 - Displays:
   - the raw token response
   - verified ID token claims
   - UserInfo claims
   - mapped business concepts: Email Address, Date of Birth, Zip Code, Full Name, Home Phone
-- After successful sign-in, shows a mock initial-password step before the token and claim dashboard. The password is only compared in the browser and is not sent or stored.
+- Registration shows a mock initial-password step, account recovery shows a mock password-reset step, and sign-in goes directly to the provider dashboard. Passwords are only compared in the browser and are not sent or stored.
 
 ## Quick start
-1. Make sure the OIDC client allows this redirect URI:
-   `http://localhost:3010/auth/callback`
+1. In the alpha realm, open **Applications > OAuth 2.0 > Clients > epiccarelink**. Register these separate URIs on the client:
+  - Redirect URI: `http://localhost:3010/auth/callback`
+  - Post Logout Redirect URI: `http://localhost:3010/`
 2. Create the local environment file if needed:
 
 ```bash
@@ -37,12 +40,24 @@ docker compose up --build -d
 
 The container receives settings from `.env`; the Node app does not read that file itself. No Node.js or npm installation on the Mac is needed. To run the syntax check inside Docker, use `docker build -f Dockerfile --target check .`.
 
+## Logout
+In the PingAM admin console, select the alpha realm, then go to **Applications > OAuth 2.0 > Clients > epiccarelink**. Add `http://localhost:3010/` to the client's **Post Logout Redirect URIs** setting. This is separate from the login Redirect URI ending in `/auth/callback`.
+
+Logout posts the current ID token to the app, then redirects through the `end_session_endpoint` from OIDC discovery as `id_token_hint`. By default, the post-logout URL is derived from the redirect URI origin. Set `END_SESSION_ENDPOINT` if discovery is unavailable, or `POST_LOGOUT_REDIRECT_URI` to override the return URL; register that exact URL on the AIC client.
+
 ## Registration journey routing
 If your PingOne AIC tenant uses a specific journey for registration, set these values in `.env`:
 
 ```dotenv
 AIC_REGISTER_AUTH_INDEX_TYPE=service
 AIC_REGISTER_AUTH_INDEX_VALUE=your-registration-journey-name
+```
+
+Account recovery can use a separate PingOne AIC journey by setting these values in `.env`:
+
+```dotenv
+AIC_RECOVER_AUTH_INDEX_TYPE=service
+AIC_RECOVER_AUTH_INDEX_VALUE=your-recovery-journey-name
 ```
 
 
