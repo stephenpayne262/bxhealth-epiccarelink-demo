@@ -33,6 +33,15 @@ const CONFIG = {
       scope: process.env.MYCHART_PINGONE_SCOPE || 'openid profile email',
       redirectUri: process.env.MYCHART_PINGONE_REDIRECT_URI || `http://localhost:${PORT}/mychart-pingone/auth/callback`,
       postLogoutRedirectUri: process.env.MYCHART_PINGONE_POST_LOGOUT_REDIRECT_URI || `${new URL(process.env.MYCHART_PINGONE_REDIRECT_URI || `http://localhost:${PORT}/mychart-pingone/auth/callback`).origin}/`
+    },
+    'epiccare-pingone': {
+      clientId: process.env.EPICCARE_PINGONE_CLIENT_ID || '',
+      clientSecret: process.env.EPICCARE_PINGONE_CLIENT_SECRET || '',
+      tokenEndpointAuthMethod: process.env.EPICCARE_PINGONE_TOKEN_ENDPOINT_AUTH_METHOD || 'client_secret_basic',
+      discoveryUrl: process.env.EPICCARE_PINGONE_DISCOVERY_URL || '',
+      scope: process.env.EPICCARE_PINGONE_SCOPE || 'openid profile email',
+      redirectUri: process.env.EPICCARE_PINGONE_REDIRECT_URI || `http://localhost:${PORT}/epiccare-pingone/auth/callback`,
+      postLogoutRedirectUri: process.env.EPICCARE_PINGONE_POST_LOGOUT_REDIRECT_URI || `${new URL(process.env.EPICCARE_PINGONE_REDIRECT_URI || `http://localhost:${PORT}/epiccare-pingone/auth/callback`).origin}/`
     }
   },
   scope: process.env.SCOPE || 'openid profile email',
@@ -59,6 +68,10 @@ function getAppConfig(app = 'epiccarelink') {
   const appConfig = CONFIG.apps[app];
   if (!appConfig) throw new Error(`Unknown demo app: ${app}`);
   return appConfig;
+}
+
+function isPingOneApp(app) {
+  return app === 'mychart-pingone' || app === 'epiccare-pingone';
 }
 
 function getClientConfig(app = 'epiccarelink') {
@@ -133,7 +146,9 @@ function logOidc(context, event, details = {}, level = 'debug') {
     entry.validationCode = validationErrors.has(details.validationCode) ? details.validationCode : 'validation_failed';
   }
   if (['MYCHART_PINGONE_CLIENT_ID', 'MYCHART_PINGONE_CLIENT_SECRET', 'MYCHART_PINGONE_DISCOVERY_URL',
-    'MYCHART_PINGONE_SCOPE', 'issuer', 'authorization_endpoint', 'token_endpoint', 'jwks_uri',
+    'MYCHART_PINGONE_SCOPE', 'EPICCARE_PINGONE_CLIENT_ID', 'EPICCARE_PINGONE_CLIENT_SECRET',
+    'EPICCARE_PINGONE_DISCOVERY_URL', 'EPICCARE_PINGONE_SCOPE',
+    'issuer', 'authorization_endpoint', 'token_endpoint', 'jwks_uri',
     'userinfo_endpoint', 'end_session_endpoint'].includes(details.configurationField)) {
     entry.configurationField = details.configurationField;
   }
@@ -145,11 +160,20 @@ const epiccarelinkHtml = fs.readFileSync(path.join(__dirname, 'epiccarelink.html
 const mychartHtml = fs.readFileSync(path.join(__dirname, 'mychart.html'), 'utf8');
 
 function renderMyChartPage(app) {
-  const isPingOne = app === 'mychart-pingone';
+  const isPingOne = isPingOneApp(app);
   return mychartHtml
     .replaceAll('{{APP_PATH}}', `/${app}`)
+    .replaceAll('{{PROVIDER}}', isPingOne ? 'PingOne and DaVinci' : 'PingOne AIC');
+}
+
+function renderEpicCareLinkPage(app) {
+  const isPingOne = isPingOneApp(app);
+  return epiccarelinkHtml
+    .replaceAll('{{APP_PATH}}', `/${app}`)
     .replaceAll('{{PROVIDER}}', isPingOne ? 'PingOne and DaVinci' : 'PingOne AIC')
-    .replace('{{RECOVERY_ACTION}}', isPingOne ? '' : '<a class="button button-secondary" href="/mychart/auth/recover">Recover MyChart account using PingOne AIC</a>');
+    .replace('{{FLOW_GUIDANCE}}', isPingOne
+      ? 'Configure DaVinci to branch on flow=login, flow=register, and flow=recover.'
+      : 'Use the AIC authIndex settings to route registration and recovery journeys.');
 }
 
 function send(res, status, body, type = 'text/html; charset=utf-8') {
@@ -175,7 +199,7 @@ function sha256base64url(input) {
 }
 
 async function loadDiscovery(app = 'epiccarelink', diagnostic) {
-  const isPingOne = app === 'mychart-pingone';
+  const isPingOne = isPingOneApp(app);
   const discoveryUrl = isPingOne ? getAppConfig(app).discoveryUrl : CONFIG.discoveryUrl;
   if (!discoveryUrl) return null;
   const startedAt = Date.now();
@@ -189,31 +213,32 @@ async function loadDiscovery(app = 'epiccarelink', diagnostic) {
     return discovery;
   } catch (error) {
     logOidc(diagnostic, 'discovery.failed', { durationMs: Date.now() - startedAt, usingFallback: !isPingOne }, 'warn');
-    if (isPingOne) throw new Error('PingOne discovery is unavailable. Check MYCHART_PINGONE_DISCOVERY_URL and provider connectivity.');
+    if (isPingOne) throw new Error("PingOne discovery is unavailable. Check this demo's discovery URL and provider connectivity.");
     return null;
   }
 }
 
 async function resolveEndpoints(app = 'epiccarelink', diagnostic) {
-  if (app === 'mychart-pingone') {
+  if (isPingOneApp(app)) {
     const config = getAppConfig(app);
+    const prefix = app === 'epiccare-pingone' ? 'EPICCARE_PINGONE' : 'MYCHART_PINGONE';
     for (const [key, name] of [
-      ['clientId', 'MYCHART_PINGONE_CLIENT_ID'],
-      ['clientSecret', 'MYCHART_PINGONE_CLIENT_SECRET'],
-      ['discoveryUrl', 'MYCHART_PINGONE_DISCOVERY_URL']
+      ['clientId', `${prefix}_CLIENT_ID`],
+      ['clientSecret', `${prefix}_CLIENT_SECRET`],
+      ['discoveryUrl', `${prefix}_DISCOVERY_URL`]
     ]) {
       if (!config[key]) {
         logOidc(diagnostic, 'configuration.invalid', { configurationField: name }, 'error');
-        throw new Error(`Configure ${name} to use the MyChart PingOne demo.`);
+        throw new Error(`Configure ${name} to use this PingOne demo.`);
       }
     }
     if (new URL(config.discoveryUrl).protocol !== 'https:') {
-      logOidc(diagnostic, 'configuration.invalid', { configurationField: 'MYCHART_PINGONE_DISCOVERY_URL' }, 'error');
-      throw new Error('MYCHART_PINGONE_DISCOVERY_URL must use HTTPS.');
+      logOidc(diagnostic, 'configuration.invalid', { configurationField: `${prefix}_DISCOVERY_URL` }, 'error');
+      throw new Error(`${prefix}_DISCOVERY_URL must use HTTPS.`);
     }
     if (!config.scope.split(/\s+/).includes('openid')) {
-      logOidc(diagnostic, 'configuration.invalid', { configurationField: 'MYCHART_PINGONE_SCOPE' }, 'error');
-      throw new Error('MYCHART_PINGONE_SCOPE must include openid.');
+      logOidc(diagnostic, 'configuration.invalid', { configurationField: `${prefix}_SCOPE` }, 'error');
+      throw new Error(`${prefix}_SCOPE must include openid.`);
     }
     const discovery = await loadDiscovery(app, diagnostic);
     for (const name of ['issuer', 'authorization_endpoint', 'token_endpoint', 'jwks_uri']) {
@@ -326,14 +351,17 @@ function serializeForInlineScript(value) {
 }
 
 function renderPostLoginPage({ flow, app, tokenResponse, idTokenClaims, userInfo, mappedClaims }) {
-  const isMyChart = app !== 'epiccarelink';
+  const isMyChart = app.startsWith('mychart');
+  const isPingOne = isPingOneApp(app);
   const appTitle = isMyChart ? 'Demo MyChart' : 'EpicCare Link';
   const appPath = `/${app}`;
-  const provider = app === 'mychart-pingone' ? 'PingOne and DaVinci' : 'PingOne AIC';
+  const provider = isPingOne ? 'PingOne and DaVinci' : 'PingOne AIC';
   const demoData = serializeForInlineScript({ flow, tokenResponse, idTokenClaims, userInfo, mappedClaims });
   const needsPasswordStep = flow === 'register' || flow === 'recover';
   const passwordStepEyebrow = flow === 'recover' ? `${appTitle} | Account recovery` : `${appTitle} | Initial account setup`;
-  const passwordStepTitle = flow === 'recover' ? `Reset your ${appTitle} password` : 'Choose an initial password';
+  const passwordStepTitle = flow === 'recover'
+    ? (isMyChart ? 'Recover your Epic MyChart Account' : `Reset your ${appTitle} password`)
+    : (isMyChart ? 'Create your Epic MyChart Password' : 'Choose an initial password');
   const passwordStepIntro = flow === 'recover'
     ? `Your identity is verified. Set a new password for this mock ${appTitle} experience.`
     : `Your identity is verified. Set a password for this mock ${appTitle} experience.`;
@@ -458,7 +486,7 @@ h1 { margin: 0 0 9px; color: var(--ink); font-size: 27px; line-height: 1.18; }
       <span class="brand-name"><small>BX-Health demo</small><strong>${appTitle}</strong></span>
     </a>
     <div class="topbar-actions">
-      <span class="demo-label">${isMyChart ? `${provider} identity demo` : 'Epic Toolbox integration'}</span>
+      <span class="demo-label">${isMyChart || isPingOne ? `${provider} identity demo` : 'Epic Toolbox integration'}</span>
       <form class="logout-form" action="${appPath}/auth/logout" method="post">
         <input type="hidden" name="id_token_hint" value="${escapeHtml(tokenResponse.id_token || '')}" />
         <button class="top-link logout-button" type="submit">Logout</button>
@@ -672,7 +700,7 @@ h1 { margin: 0 0 9px; color: var(--ink); font-size: 27px; line-height: 1.18; }
 }
 
 function renderResultPage({ flow, app = 'epiccarelink', endpoints, tokenResponse, idTokenClaims, userInfo, mappedClaims, error, correlationId }) {
-  const appTitle = app === 'epiccarelink' ? 'EpicCare Link' : 'Demo MyChart';
+  const appTitle = app.startsWith('mychart') ? 'Demo MyChart' : 'EpicCare Link';
   const appPath = `/${app}`;
   const payload = tokenResponse ? JSON.stringify(tokenResponse, null, 2) : '';
   const idPayload = idTokenClaims ? JSON.stringify(idTokenClaims, null, 2) : '';
@@ -770,6 +798,7 @@ pre { margin: 0; padding: 14px; background: var(--panel-soft); border: 1px solid
 }
 
 async function handleAuthorize(req, res, flow, app = 'epiccarelink') {
+  const isPingOne = isPingOneApp(app);
   logOidc(req.oidc, 'authorization.started');
   const endpoints = await resolveEndpoints(app, req.oidc);
   pruneExpiredSessions();
@@ -791,12 +820,12 @@ async function handleAuthorize(req, res, flow, app = 'epiccarelink') {
   url.searchParams.set('redirect_uri', appConfig.redirectUri);
   url.searchParams.set('response_type', 'code');
   url.searchParams.set('flow', flow);
-  url.searchParams.set('scope', app === 'mychart-pingone' ? appConfig.scope : CONFIG.scope);
+  url.searchParams.set('scope', isPingOne ? appConfig.scope : CONFIG.scope);
   url.searchParams.set('state', state);
   url.searchParams.set('nonce', nonce);
   url.searchParams.set('code_challenge', codeChallenge);
   url.searchParams.set('code_challenge_method', 'S256');
-  if (app !== 'mychart-pingone') url.searchParams.set('claims', buildClaimsParameter());
+  if (!isPingOne) url.searchParams.set('claims', buildClaimsParameter());
 
   const authIndexType = flow === 'register'
     ? CONFIG.registerAuthIndexType
@@ -804,7 +833,7 @@ async function handleAuthorize(req, res, flow, app = 'epiccarelink') {
   const authIndexValue = flow === 'register'
     ? CONFIG.registerAuthIndexValue
     : flow === 'recover' ? CONFIG.recoverAuthIndexValue : '';
-  if (app !== 'mychart-pingone' && authIndexType && authIndexValue) {
+  if (!isPingOne && authIndexType && authIndexValue) {
     url.searchParams.set('authIndexType', authIndexType);
     url.searchParams.set('authIndexValue', authIndexValue);
   }
@@ -842,7 +871,7 @@ async function handleLogout(req, res, app = 'epiccarelink') {
   const endpoints = await resolveEndpoints(app, req.oidc);
   if (!endpoints.endSessionEndpoint) {
     logOidc(req.oidc, 'logout.endpoint_unavailable', {}, 'warn');
-    return send(res, 503, app === 'mychart-pingone'
+    return send(res, 503, isPingOneApp(app)
       ? 'PingOne discovery does not advertise an end-session endpoint.'
       : 'Ping end-session endpoint is unavailable. Configure END_SESSION_ENDPOINT.', 'text/plain; charset=utf-8');
   }
@@ -1023,12 +1052,12 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === '/health') return send(res, 200, JSON.stringify({ status: 'ok' }), 'application/json');
   if (pathname === '/') return send(res, 200, indexHtml);
-  if (pathname === '/epiccarelink' || pathname === '/epiccarelink/') return send(res, 200, epiccarelinkHtml);
+  if (pathname === '/epiccarelink' || pathname === '/epiccarelink/') return send(res, 200, renderEpicCareLinkPage('epiccarelink'));
+  if (pathname === '/epiccare-pingone' || pathname === '/epiccare-pingone/') return send(res, 200, renderEpicCareLinkPage('epiccare-pingone'));
   if (pathname === '/mychart' || pathname === '/mychart/') return send(res, 200, renderMyChartPage('mychart'));
   if (pathname === '/mychart-pingone' || pathname === '/mychart-pingone/') return send(res, 200, renderMyChartPage('mychart-pingone'));
 
-  const app = pathname.startsWith('/mychart-pingone/') ? 'mychart-pingone'
-    : pathname.startsWith('/mychart/') ? 'mychart' : 'epiccarelink';
+  const app = Object.keys(CONFIG.apps).find(name => pathname.startsWith(`/${name}/`)) || 'epiccarelink';
   const appPath = `/${app}`;
   const routePath = pathname.startsWith(`${appPath}/`) ? pathname.slice(appPath.length) : pathname;
   const requestedFlow = routePath.slice('/auth/'.length);
@@ -1038,7 +1067,7 @@ const server = http.createServer(async (req, res) => {
   try {
     if (routePath === '/auth/login') return await handleAuthorize(req, res, 'login', app);
     if (routePath === '/auth/register') return await handleAuthorize(req, res, 'register', app);
-    if (routePath === '/auth/recover' && app !== 'mychart-pingone') return await handleAuthorize(req, res, 'recover', app);
+    if (routePath === '/auth/recover') return await handleAuthorize(req, res, 'recover', app);
     if (routePath === '/auth/logout') return await handleLogout(req, res, app);
     if (routePath === '/auth/callback') return await handleCallback(req, res, requestUrl, app);
   } catch (error) {

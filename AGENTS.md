@@ -1,10 +1,13 @@
 # Repository Guidance
 
 - Read [README.md](README.md) for the demo overview and OIDC setup.
+- For local development, run builds, tests, dependency installation, syntax checks, validation scripts, and helper scripts inside Docker Desktop containers, not directly on the Mac. This includes Node.js, npm, Python, shell-based validation, and HTTP-check helpers. Necessary host Docker and Git commands and editor file/search tools are allowed.
+- Use hardened helper containers: non-root user, read-only filesystem, `--cap-drop ALL`, `--security-opt no-new-privileges:true`, bounded resources, and `--network none` when networking is not needed. Mount only required files, read-only by default; never mount the Docker socket or the user's home directory. Allow network access only when a build needs dependencies or a check needs the local app/provider discovery. Never print secrets or bake environment files into images.
+- Containers provide execution isolation, not a native Copilot/Claude-style host sandbox or a complete security boundary. Do not claim native sandbox mode is enabled. The approved AWS deployment skill is exempt from this local container-execution policy; follow its own scoped commands and approval rules.
 - Run and test the app only in Docker Desktop. Do not run Node.js or npm on the macOS host. Use `docker compose up --build -d`, check `http://localhost:3010` and `/health`, and stop it with `docker compose down` when testing is complete.
 - Use `docker build -f Dockerfile --target check .` for the in-container syntax check and focused OIDC routing tests.
 - The Node process reads `process.env`; Compose passes local values from `.env` into the container. Use `.env.example` as the reference and never copy environment files into the image.
-- `server.js` owns HTTP routes and OIDC handling; `index.html` contains the Toolbox overview, and `epiccarelink.html` and `mychart.html` contain the demo login UIs. Keep the CommonJS app simple and its dependencies inside the container.
+- `server.js` owns HTTP routes and OIDC handling; `index.html` contains the Toolbox overview, and `epiccarelink.html` and `mychart.html` are shared by each product's AIC and PingOne/DaVinci demos. EpicCare Link's PingOne demo uses `/epiccare-pingone` and `EPICCARE_PINGONE_*`. Keep the CommonJS app simple and its dependencies inside the container.
 - Treat this as a demo, not production authentication: ID tokens are verified before display, but sessions are process-local and the result page displays token data. Default credentials are demo values. Never add real credentials or tokens to the repository.
 - Do not run `initialize.sh` for normal development; it initializes Git, creates a commit, configures a remote, and pushes.
 - For AWS deployment, use only `.github/skills/redeploy-bxhealth-epiccarelink-demo/SKILL.md`. It is scoped to this app's resources and requires an approved preflight plan; never deploy manually or retarget the FHIR/MCP app.

@@ -15,6 +15,19 @@ const pingoneDiscovery = {
   end_session_endpoint: 'https://pingone.example/as/signoff'
 };
 const aicDiscovery = Object.fromEntries(Object.entries(pingoneDiscovery).map(([key, value]) => [key, value.replaceAll('pingone.example', 'aic.example')]));
+const epiccareDiscovery = Object.fromEntries(Object.entries(pingoneDiscovery).map(([key, value]) => [key, value.replaceAll('pingone.example', 'epiccare-pingone.example')]));
+const pingOneDemos = [
+  {
+    name: 'mychart-pingone', prefix: 'MYCHART_PINGONE', discovery: pingoneDiscovery,
+    clientId: 'pingone-demo', secret: 'synthetic secret:+&', scope: 'openid email',
+    basicCredentials: 'pingone-demo:synthetic+secret%3A%2B%26'
+  },
+  {
+    name: 'epiccare-pingone', prefix: 'EPICCARE_PINGONE', discovery: epiccareDiscovery,
+    clientId: 'epiccare-demo', secret: 'synthetic epiccare:+&', scope: 'openid profile',
+    basicCredentials: 'epiccare-demo:synthetic+epiccare%3A%2B%26'
+  }
+];
 
 function response() {
   return {
@@ -43,6 +56,10 @@ function loadApp(overrides = {}, globals = {}) {
       MYCHART_PINGONE_CLIENT_ID: 'pingone-demo',
       MYCHART_PINGONE_CLIENT_SECRET: 'synthetic secret:+&',
       MYCHART_PINGONE_SCOPE: 'openid email',
+      EPICCARE_PINGONE_DISCOVERY_URL: 'https://epiccare-pingone.example/discovery',
+      EPICCARE_PINGONE_CLIENT_ID: 'epiccare-demo',
+      EPICCARE_PINGONE_CLIENT_SECRET: 'synthetic epiccare:+&',
+      EPICCARE_PINGONE_SCOPE: 'openid profile',
       ...overrides
     } },
     console: { log(...args) { logs.push(args); }, warn(...args) { errors.push(args); }, error(...args) { errors.push(args); } },
@@ -51,6 +68,7 @@ function loadApp(overrides = {}, globals = {}) {
       requests.push({ url, options });
       if (url === 'https://pingone.example/discovery') return { ok: true, json: async () => pingoneDiscovery };
       if (url === 'https://aic.example/discovery') return { ok: true, json: async () => aicDiscovery };
+      if (url === 'https://epiccare-pingone.example/discovery') return { ok: true, json: async () => epiccareDiscovery };
       throw new Error('Unexpected provider request');
     },
     ...globals
@@ -72,20 +90,40 @@ function loadApp(overrides = {}, globals = {}) {
   };
 }
 
-test('MyChart pages isolate provider links and only AIC exposes recovery', async () => {
+test('MyChart pages isolate provider links and both expose recovery', async () => {
   const app = loadApp();
   for (const route of ['/mychart-pingone', '/mychart-pingone/']) {
     const res = await app.request(route);
     assert.equal(res.status, 200);
     assert.match(res.body, /href="\/mychart-pingone\/auth\/login">Sign in with PingOne and DaVinci/);
     assert.match(res.body, /href="\/mychart-pingone\/auth\/register">Register with PingOne and DaVinci/);
-    assert.doesNotMatch(res.body, /auth\/recover|PingOne AIC|\{\{/);
+    assert.match(res.body, /href="\/mychart-pingone\/auth\/recover">Recover MyChart account using PingOne and DaVinci/);
+    assert.doesNotMatch(res.body, /PingOne AIC|\{\{/);
   }
   const aic = await app.request('/mychart');
   assert.match(aic.body, /href="\/mychart\/auth\/login">Sign in with PingOne AIC/);
   assert.match(aic.body, /href="\/mychart\/auth\/recover"/);
-  assert.equal((await app.request('/mychart-pingone/auth/recover')).status, 404);
   assert.equal((await app.request('/epiccarelink-pingone')).status, 404);
+});
+
+test('EpicCare Link PingOne demo is available and keeps its provider links separate', async () => {
+  const app = loadApp();
+  for (const route of ['/epiccare-pingone', '/epiccare-pingone/']) {
+    const res = await app.request(route);
+    assert.equal(res.status, 200);
+    assert.match(res.body, /<title>BX-Health EpicCare Link \| PingOne and DaVinci<\/title>/);
+    for (const flow of ['login', 'register', 'recover']) {
+      assert.ok(res.body.includes(`href="/epiccare-pingone/auth/${flow}"`));
+    }
+    assert.doesNotMatch(res.body, /PingOne AIC|\{\{/);
+    assert.match(res.body, /flow=login, flow=register, and flow=recover/);
+  }
+  const aic = await app.request('/epiccarelink');
+  assert.match(aic.body, /Sign in with PingOne AIC/);
+  assert.doesNotMatch(aic.body, /href="\/epiccare-pingone\/auth\//);
+  const overview = await app.request('/');
+  assert.match(overview.body, /href="\/epiccare-pingone">Launch EpicCare Link with PingOne and DaVinci/);
+  assert.doesNotMatch(overview.body, /Coming soon|Not yet available/);
 });
 
 test('EpicCare Link uses prefixed actions while both route families select its AIC client', async () => {
@@ -174,7 +212,7 @@ test('EpicCare Link logout aliases use its provider and prefixed callbacks rejec
     assert.equal(url.searchParams.get('client_id'), 'epiccarelink');
     assert.equal(url.searchParams.get('post_logout_redirect_uri'), 'http://localhost:3010/');
   }
-  for (const prefix of ['/mychart', '/mychart-pingone']) {
+  for (const prefix of ['/mychart', '/mychart-pingone', '/epiccare-pingone']) {
     const redirect = await app.request(`${prefix}/auth/login`);
     const state = new URL(redirect.headers.Location).searchParams.get('state');
     const rejected = await app.request(`/epiccarelink/auth/callback?state=${state}&code=synthetic-code`);
@@ -185,21 +223,22 @@ test('EpicCare Link logout aliases use its provider and prefixed callbacks rejec
   assert.equal(app.requests.some(request => request.url === aicDiscovery.token_endpoint), false);
 });
 
-test('login and registration use PingOne settings and PKCE without AIC routing parameters', async () => {
+test('login, registration and recovery use PingOne settings and PKCE without AIC routing parameters', async () => {
   const app = loadApp();
-  for (const flow of ['login', 'register']) {
-    const res = await app.request(`/mychart-pingone/auth/${flow}`);
+  const cases = pingOneDemos.flatMap(demo => ['login', 'register', 'recover'].map(flow => ({ demo, flow })));
+  for (const { demo, flow } of cases) {
+    const res = await app.request(`/${demo.name}/auth/${flow}`);
     assert.equal(res.status, 302);
     const url = new URL(res.headers.Location);
-    assert.equal(url.origin + url.pathname, pingoneDiscovery.authorization_endpoint);
+    assert.equal(url.origin + url.pathname, demo.discovery.authorization_endpoint);
     assert.equal(url.searchParams.get('flow'), flow);
-    assert.equal(url.searchParams.get('client_id'), 'pingone-demo');
-    assert.equal(url.searchParams.get('scope'), 'openid email');
-    assert.equal(url.searchParams.get('redirect_uri'), 'http://localhost:3010/mychart-pingone/auth/callback');
+    assert.equal(url.searchParams.get('client_id'), demo.clientId);
+    assert.equal(url.searchParams.get('scope'), demo.scope);
+    assert.equal(url.searchParams.get('redirect_uri'), `http://localhost:3010/${demo.name}/auth/callback`);
     assert.equal(url.searchParams.get('response_type'), 'code');
     assert.equal(url.searchParams.get('code_challenge_method'), 'S256');
     const session = app.api.sessions.get(url.searchParams.get('state'));
-    assert.equal(session.app, 'mychart-pingone');
+    assert.equal(session.app, demo.name);
     assert.equal(session.nonce, url.searchParams.get('nonce'));
     assert.equal(require('node:crypto').createHash('sha256').update(session.codeVerifier).digest('base64url'), url.searchParams.get('code_challenge'));
     for (const key of ['authIndexType', 'authIndexValue', 'claims', 'client_secret']) assert.equal(url.searchParams.has(key), false);
@@ -214,54 +253,109 @@ test('login and registration use PingOne settings and PKCE without AIC routing p
 });
 
 test('callback exchanges with the selected provider and auth method, verifies before display, and rejects replay', async () => {
-  for (const method of ['client_secret_basic', 'client_secret_post']) {
-    const app = loadApp({ MYCHART_PINGONE_TOKEN_ENDPOINT_AUTH_METHOD: method });
-    const redirect = await app.request('/mychart-pingone/auth/register');
+  const cases = pingOneDemos.flatMap(demo => ['client_secret_basic', 'client_secret_post']
+    .flatMap(method => ['login', 'register', 'recover'].map(flow => ({ demo, method, flow }))));
+  for (const { demo, method, flow } of cases) {
+    const app = loadApp({ [`${demo.prefix}_TOKEN_ENDPOINT_AUTH_METHOD`]: method });
+    const redirect = await app.request(`/${demo.name}/auth/${flow}`);
     const state = new URL(redirect.headers.Location).searchParams.get('state');
     const session = app.api.sessions.get(state);
     let verified = false;
     app.api.setVerifier(async (token, nonce, endpoints, audience) => {
       assert.equal(token, 'synthetic-id-token');
       assert.equal(nonce, session.nonce);
-      assert.equal(endpoints.issuer, pingoneDiscovery.issuer);
-      assert.equal(endpoints.jwksUri, pingoneDiscovery.jwks_uri);
-      assert.equal(audience, 'pingone-demo');
+      assert.equal(endpoints.issuer, demo.discovery.issuer);
+      assert.equal(endpoints.jwksUri, demo.discovery.jwks_uri);
+      assert.equal(audience, demo.clientId);
       verified = true;
       return { sub: 'synthetic-user' };
     });
     const discoveryFetch = app.context.fetch;
     app.context.fetch = async (url, options) => {
-      if (url !== pingoneDiscovery.token_endpoint) return discoveryFetch(url, options);
+      if (url !== demo.discovery.token_endpoint) return discoveryFetch(url, options);
       assert.equal(options.method, 'POST');
       const body = new URLSearchParams(options.body);
-      assert.equal(body.get('redirect_uri'), 'http://localhost:3010/mychart-pingone/auth/callback');
+      assert.equal(body.get('redirect_uri'), `http://localhost:3010/${demo.name}/auth/callback`);
       assert.equal(body.get('code_verifier'), session.codeVerifier);
       assert.equal(body.get('code'), 'synthetic-code');
       if (method === 'client_secret_basic') {
-        assert.equal(Buffer.from(options.headers.Authorization.slice(6), 'base64').toString(), 'pingone-demo:synthetic+secret%3A%2B%26');
+        assert.equal(Buffer.from(options.headers.Authorization.slice(6), 'base64').toString(), demo.basicCredentials);
         assert.equal(body.has('client_id'), false);
         assert.equal(body.has('client_secret'), false);
       } else {
         assert.equal(options.headers.Authorization, undefined);
-        assert.equal(body.get('client_id'), 'pingone-demo');
-        assert.equal(body.get('client_secret'), 'synthetic secret:+&');
+        assert.equal(body.get('client_id'), demo.clientId);
+        assert.equal(body.get('client_secret'), demo.secret);
       }
       return { ok: true, json: async () => ({ id_token: 'synthetic-id-token' }) };
     };
-    const wrongProvider = await app.request(`/mychart/auth/callback?state=${state}&code=synthetic-code`);
+    const otherDemo = pingOneDemos.find(other => other.name !== demo.name);
+    const wrongProvider = await app.request(`/${otherDemo.name}/auth/callback?state=${state}&code=synthetic-code`);
     assert.equal(wrongProvider.status, 400);
     assert.equal(verified, false);
     assert.ok(app.api.sessions.has(state));
-    const callback = `/mychart-pingone/auth/callback?state=${state}&code=synthetic-code`;
+    const callback = `/${demo.name}/auth/callback?state=${state}&code=synthetic-code`;
     const res = await app.request(callback);
     assert.equal(res.status, 200);
     assert.equal(verified, true);
     assert.match(res.body, /Authentication completed through PingOne and DaVinci/);
-    assert.match(res.body, /action="\/mychart-pingone\/auth\/logout"/);
-    assert.match(res.body, /Choose an initial password/);
+    assert.ok(res.body.includes(`action="/${demo.name}/auth/logout"`));
+    assert.match(res.body, demo.name === 'epiccare-pingone' ? /<title>EpicCare Link \| BX-Health Demo/ : /<title>Demo MyChart \| BX-Health Demo/);
+    if (flow === 'login') {
+      assert.match(res.body, /id="password-step"[^>]* hidden/);
+      assert.doesNotMatch(res.body, /id="provider-dashboard"[^>]* hidden/);
+    } else {
+      assert.doesNotMatch(res.body, /id="password-step"[^>]* hidden/);
+      assert.match(res.body, /id="provider-dashboard"[^>]* hidden/);
+      const expectedTitle = demo.name === 'epiccare-pingone'
+        ? (flow === 'recover' ? 'Reset your EpicCare Link password' : 'Choose an initial password')
+        : (flow === 'recover' ? 'Recover your Epic MyChart Account' : 'Create your Epic MyChart Password');
+      assert.ok(res.body.includes(`<h1 id="setup-title">${expectedTitle}</h1>`));
+    }
     assert.equal((await app.request(callback)).status, 400);
-    const login = app.api.renderPostLoginPage({ flow: 'login', app: 'mychart-pingone', tokenResponse: {}, idTokenClaims: {}, mappedClaims: {} });
-    assert.match(login, /id="password-step"[^>]* hidden/);
+  }
+});
+
+test('EpicCare Link PingOne configuration failures never reuse another demo settings', async () => {
+  for (const [field, value] of [
+    ['CLIENT_ID', ''], ['CLIENT_SECRET', ''], ['DISCOVERY_URL', ''],
+    ['DISCOVERY_URL', 'http://epiccare-pingone.example/discovery'], ['SCOPE', 'email']
+  ]) {
+    const name = `EPICCARE_PINGONE_${field}`;
+    const app = loadApp({ [name]: value });
+    const res = await app.request('/epiccare-pingone/auth/login');
+    assert.equal(res.status, 503);
+    assert.match(res.body, /href="\/epiccare-pingone">Back to login/);
+    assert.equal(app.requests.length, 0);
+    assert.equal(app.api.sessions.size, 0);
+    assert.ok(app.diagnostics().some(entry => entry.configurationField === name));
+    assert.equal((await app.request('/mychart-pingone/auth/login')).status, 302);
+    assert.equal((await app.request('/epiccarelink/auth/login')).status, 302);
+  }
+  for (const metadata of [null, { ...epiccareDiscovery, jwks_uri: '' }]) {
+    const app = loadApp();
+    app.context.fetch = async () => ({ ok: metadata !== null, status: 503, json: async () => metadata });
+    assert.equal((await app.request('/epiccare-pingone/auth/register')).status, 503);
+    assert.equal(app.api.sessions.size, 0);
+  }
+});
+
+test('both MyChart providers share the same demo-only registration and recovery screens', () => {
+  const app = loadApp();
+  for (const provider of ['mychart', 'mychart-pingone']) {
+    for (const [flow, title] of [
+      ['register', 'Create your Epic MyChart Password'],
+      ['recover', 'Recover your Epic MyChart Account']
+    ]) {
+      const page = app.api.renderPostLoginPage({
+        flow, app: provider, tokenResponse: {}, idTokenClaims: {}, userInfo: {}, mappedClaims: {}
+      });
+      assert.ok(page.includes(`<h1 id="setup-title">${title}</h1>`));
+      assert.doesNotMatch(page, /id="password-step"[^>]* hidden/);
+      assert.match(page, /discards them without sending or saving either value/);
+      assert.match(page, /No Epic account changes are made/);
+      assert.ok(page.includes(`action="/${provider}/auth/logout"`));
+    }
   }
 });
 
@@ -275,6 +369,7 @@ test('missing config or failed/incomplete discovery reports unavailable without 
   ]) {
     const app = loadApp(overrides);
     assert.equal((await app.request('/mychart-pingone/auth/login')).status, 503);
+    assert.equal((await app.request('/mychart-pingone/auth/recover')).status, 503);
     assert.equal(app.requests.length, 0);
     assert.equal(app.api.sessions.size, 0);
     assert.ok(app.errors.length);
@@ -292,34 +387,37 @@ test('missing config or failed/incomplete discovery reports unavailable without 
 });
 
 test('logout stays with PingOne and callback errors link back to its demo', async () => {
-  const app = loadApp();
-  const req = Readable.from([Buffer.from('id_token_hint=synthetic-id-token')]);
-  req.method = 'POST';
-  const res = await app.request('/mychart-pingone/auth/logout', req);
-  assert.equal(res.status, 302);
-  const url = new URL(res.headers.Location);
-  assert.equal(url.origin + url.pathname, pingoneDiscovery.end_session_endpoint);
-  assert.equal(url.searchParams.get('client_id'), 'pingone-demo');
-  assert.equal(url.searchParams.get('post_logout_redirect_uri'), 'http://localhost:3010/');
-  const error = await app.request('/mychart-pingone/auth/callback?error=access_denied');
-  assert.equal(error.status, 400);
-  assert.match(error.body, /href="\/mychart-pingone">Back to login/);
-  assert.match(error.body, /OIDC error failed/);
-  app.context.fetch = async () => ({ ok: true, json: async () => ({ ...pingoneDiscovery, end_session_endpoint: undefined }) });
-  const secondReq = Readable.from([Buffer.from('id_token_hint=synthetic-id-token')]);
-  secondReq.method = 'POST';
-  const unavailable = await app.request('/mychart-pingone/auth/logout', secondReq);
-  assert.equal(unavailable.status, 503);
-  assert.equal(unavailable.headers.Location, undefined);
+  for (const demo of pingOneDemos) {
+    const app = loadApp();
+    const req = Readable.from([Buffer.from('id_token_hint=synthetic-id-token')]);
+    req.method = 'POST';
+    const res = await app.request(`/${demo.name}/auth/logout`, req);
+    assert.equal(res.status, 302);
+    const url = new URL(res.headers.Location);
+    assert.equal(url.origin + url.pathname, demo.discovery.end_session_endpoint);
+    assert.equal(url.searchParams.get('client_id'), demo.clientId);
+    assert.equal(url.searchParams.get('post_logout_redirect_uri'), 'http://localhost:3010/');
+    const error = await app.request(`/${demo.name}/auth/callback?error=access_denied`);
+    assert.equal(error.status, 400);
+    assert.ok(error.body.includes(`href="/${demo.name}">Back to login`));
+    assert.match(error.body, /OIDC error failed/);
+    assert.match(error.body, demo.name === 'epiccare-pingone' ? /EpicCare Link token viewer/ : /Demo MyChart token viewer/);
+    app.context.fetch = async () => ({ ok: true, json: async () => ({ ...demo.discovery, end_session_endpoint: undefined }) });
+    const secondReq = Readable.from([Buffer.from('id_token_hint=synthetic-id-token')]);
+    secondReq.method = 'POST';
+    const unavailable = await app.request(`/${demo.name}/auth/logout`, secondReq);
+    assert.equal(unavailable.status, 503);
+    assert.equal(unavailable.headers.Location, undefined);
+  }
 });
 
 test('all demo login pages put the primary sign-in first and secondary actions after it', async () => {
   const app = loadApp();
-  for (const [route, actionsClass] of [['/epiccarelink', 'actions'], ['/mychart', 'login-card'], ['/mychart-pingone', 'login-card']]) {
+  for (const [route, actionsClass] of [['/epiccarelink', 'actions'], ['/mychart', 'login-card'], ['/mychart-pingone', 'login-card'], ['/epiccare-pingone', 'actions']]) {
     const res = await app.request(route);
     const actions = res.body.slice(res.body.indexOf(`class="${actionsClass}"`));
     const links = [...actions.matchAll(/<a class="([^"]+)" href="([^"]+)">([^<]+)<\/a>/g)].filter(link => /\/auth\/(login|register|recover)$/.test(link[2]));
-    assert.match(links[0][2], /\/auth\/login$/);
+    assert.deepEqual(links.map(link => link[2]), ['login', 'register', 'recover'].map(flow => `${route}/auth/${flow}`));
     assert.match(links[0][3], /^Sign in with Ping/);
     assert.equal(links[0][1].includes('secondary'), false);
     for (const link of links.slice(1)) assert.ok(link[1].includes('secondary'));
@@ -430,9 +528,9 @@ test('diagnostics trace token, verification and UserInfo stages without logging 
   }
 });
 
-test('failed PingOne ID-token validation never displays the returned tokens', async () => {
+test('failed PingOne recovery ID-token validation never displays tokens or a password screen', async () => {
   const app = loadApp();
-  const redirect = await app.request('/mychart-pingone/auth/login');
+  const redirect = await app.request('/mychart-pingone/auth/recover');
   const state = new URL(redirect.headers.Location).searchParams.get('state');
   const discoveryFetch = app.context.fetch;
   app.context.fetch = async (url, options) => url === pingoneDiscovery.token_endpoint
@@ -442,7 +540,7 @@ test('failed PingOne ID-token validation never displays the returned tokens', as
   const res = await app.request(`/mychart-pingone/auth/callback?state=${state}&code=synthetic-code`);
   assert.equal(res.status, 400);
   assert.match(res.body, /ID token validation failed/);
-  assert.doesNotMatch(res.body, /synthetic-invalid-token|Your demo workspace is ready/);
+  assert.doesNotMatch(res.body, /synthetic-invalid-token|Your demo workspace is ready|Recover your Epic MyChart Account/);
 });
 
 test('malformed URLs return 400 without rejecting the handler or logging raw input', async () => {
