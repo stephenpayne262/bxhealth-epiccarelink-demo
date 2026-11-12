@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Demo MyChart | {{PROVIDER}}</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #19344a;
+      --muted: #526b7e;
+      --line: #d6e0e8;
+      --blue: #176f9d;
+      --blue-dark: #115579;
+      --pale-blue: #eaf5fa;
+      --canvas: #f3f7f9;
+      --white: #fff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: var(--canvas);
+      color: var(--ink);
+      font-family: Arial, sans-serif;
+    }
+    a { color: var(--blue-dark); }
+    .topbar {
+      min-height: 76px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 14px clamp(20px, 6vw, 88px);
+      background: var(--white);
+      border-bottom: 1px solid var(--line);
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 11px;
+      color: var(--ink);
+      text-decoration: none;
+    }
+    .brand-icon { width: 42px; height: 42px; flex: 0 0 42px; }
+    .brand-name { display: grid; gap: 2px; }
+    .brand-name strong { font-size: 24px; letter-spacing: -0.04em; }
+    .brand-name span {
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .demo-pill {
+      padding: 7px 11px;
+      border: 1px solid #aacbdc;
+      border-radius: 999px;
+      background: var(--pale-blue);
+      color: #155878;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .demo-notice {
+      padding: 11px 20px;
+      background: #fff8df;
+      color: #624d11;
+      font-size: 12px;
+      line-height: 1.5;
+      text-align: center;
+    }
+    .main {
+      width: min(100% - 36px, 1040px);
+      margin: auto;
+      padding: 52px 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(310px, 410px);
+      align-items: center;
+      gap: clamp(36px, 8vw, 100px);
+    }
+    .intro h1 {
+      max-width: 13ch;
+      margin: 0 0 17px;
+      color: #163f5b;
+      font-size: clamp(34px, 5vw, 48px);
+      letter-spacing: -0.04em;
+      line-height: 1.08;
+    }
+    .intro p {
+      max-width: 52ch;
+      margin: 0;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.7;
+    }
+    .intro-note {
+      display: flex;
+      align-items: flex-start;
+      gap: 11px;
+      max-width: 480px;
+      margin-top: 28px;
+      padding: 15px;
+      border: 1px solid #cfe0e9;
+      border-radius: 8px;
+      background: var(--white);
+      color: #35566d;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .info-icon {
+      width: 20px;
+      height: 20px;
+      flex: 0 0 20px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--pale-blue);
+      color: var(--blue-dark);
+      font-weight: 800;
+    }
+    .login-card {
+      padding: 30px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--white);
+      box-shadow: 0 12px 34px rgba(25, 52, 74, 0.09);
+    }
+    .login-card h2 {
+      margin: 0 0 8px;
+      color: #193e57;
+      font-size: 23px;
+    }
+    .login-card > p {
+      margin: 0 0 22px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+    .button {
+      width: 100%;
+      min-height: 47px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 0 12px;
+      padding: 11px 16px;
+      border: 1px solid var(--blue);
+      border-radius: 5px;
+      background: var(--blue);
+      color: var(--white);
+      font-size: 14px;
+      font-weight: 700;
+      text-align: center;
+      text-decoration: none;
+      transition: background-color 0.15s ease;
+    }
+    .button:hover, .button:focus-visible { background: var(--blue-dark); }
+    .button-secondary {
+      background: var(--white);
+      color: var(--blue-dark);
+    }
+    .button-secondary:hover, .button-secondary:focus-visible {
+      background: var(--pale-blue);
+      color: var(--blue-dark);
+    }
+    .auth-note {
+      margin-top: 10px;
+      padding-top: 15px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+    .footer {
+      padding: 20px;
+      border-top: 1px solid var(--line);
+      background: var(--white);
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.6;
+      text-align: center;
+    }
+    .footer a { font-weight: 700; }
+    @media (max-width: 760px) {
+      .topbar { min-height: 68px; padding: 12px 18px; }
+      .brand-icon { width: 36px; height: 36px; flex-basis: 36px; }
+      .brand-name strong { font-size: 20px; }
+      .demo-pill { font-size: 9px; }
+      .main { grid-template-columns: 1fr; gap: 28px; padding: 34px 0; }
+      .intro h1 { max-width: none; font-size: 36px; }
+      .login-card { padding: 24px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="{{APP_PATH}}" aria-label="Demo MyChart home">
+      <svg class="brand-icon" viewBox="0 0 48 48" role="img" aria-label="Demo MyChart logo">
+        <circle cx="24" cy="24" r="22" fill="#176f9d" />
+        <path d="M21 10h6v11h11v6H27v11h-6V27H10v-6h11z" fill="#fff" />
+      </svg>
+      <span class="brand-name"><strong>MyChart</strong><span>BX-Health Demo</span></span>
+    </a>
+    <span class="demo-pill">Demo version 1.0.16</span>
+  </header>
+  <div class="demo-notice" role="note">
+    Demonstration only. This mock is not affiliated with Epic or a healthcare provider and does not collect passwords.
+  </div>
+  <main class="main">
+    <section class="intro">
+      <h1>Your health information, all in one place.</h1>
+      <p>Explore a simulated patient portal experience. Sign-in for this demonstration is provided by {{PROVIDER}}.</p>
+      <div class="intro-note">
+        <span class="info-icon" aria-hidden="true">i</span>
+        <span>Choosing “Sign in with {{PROVIDER}}” opens the configured identity provider. No username or password is entered on this demo page.</span>
+      </div>
+    </section>
+    <section class="login-card" aria-labelledby="login-title">
+      <h2 id="login-title">Welcome to Demo MyChart</h2>
+      <p>Continue to your demonstration account using the configured {{PROVIDER}} application.</p>
+      <a class="button" href="{{APP_PATH}}/auth/login">Sign in with {{PROVIDER}}</a>
+      <a class="button button-secondary" href="{{APP_PATH}}/auth/register">Register with {{PROVIDER}}</a>
+      {{RECOVERY_ACTION}}
+      <div class="auth-note">This demo uses its own {{PROVIDER}} OIDC client configuration, separate from the other demonstrations.</div>
+    </section>
+  </main>
+  <footer class="footer">
+    <div>MyChart is a trademark of Epic Systems Corporation. This independent demo is not endorsed by or affiliated with Epic.</div>
+    <div><a href="/">Back to Epic Toolbox overview</a> | <a href="/epiccarelink">Open the EpicCare Link demo</a> · Version 1.0.16</div>
+  </footer>
+</body>
+</html>

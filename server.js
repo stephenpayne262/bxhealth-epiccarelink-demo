@@ -5,15 +5,37 @@ const crypto = require('crypto');
 const { URL } = require('url');
 
 const PORT = Number(process.env.PORT || 3010);
+const OIDC_DEBUG = process.env.OIDC_DEBUG === 'true';
 const CONFIG = {
-  clientId: process.env.CLIENT_ID || 'epiccarelink',
-  clientSecret: process.env.CLIENT_SECRET || 'epicsecret',
-  redirectUri: process.env.REDIRECT_URI || `http://localhost:${PORT}/auth/callback`,
+  apps: {
+    epiccarelink: {
+      clientId: process.env.CLIENT_ID || 'epiccarelink',
+      clientSecret: process.env.CLIENT_SECRET || 'epicsecret',
+      tokenEndpointAuthMethod: process.env.TOKEN_ENDPOINT_AUTH_METHOD || 'client_secret_post',
+      redirectUri: process.env.REDIRECT_URI || `http://localhost:${PORT}/auth/callback`,
+      postLogoutRedirectUri: process.env.POST_LOGOUT_REDIRECT_URI || `${new URL(process.env.REDIRECT_URI || `http://localhost:${PORT}/auth/callback`).origin}/`
+    },
+    mychart: {
+      clientId: process.env.MYCHART_CLIENT_ID || 'demo-mychart',
+      clientSecret: process.env.MYCHART_CLIENT_SECRET || 'demomychartsecret',
+      tokenEndpointAuthMethod: process.env.MYCHART_TOKEN_ENDPOINT_AUTH_METHOD || 'client_secret_basic',
+      redirectUri: process.env.MYCHART_REDIRECT_URI || `http://localhost:${PORT}/mychart/auth/callback`,
+      postLogoutRedirectUri: process.env.MYCHART_POST_LOGOUT_REDIRECT_URI || `${new URL(process.env.MYCHART_REDIRECT_URI || `http://localhost:${PORT}/mychart/auth/callback`).origin}/`
+    },
+    'mychart-pingone': {
+      clientId: process.env.MYCHART_PINGONE_CLIENT_ID || '',
+      clientSecret: process.env.MYCHART_PINGONE_CLIENT_SECRET || '',
+      tokenEndpointAuthMethod: process.env.MYCHART_PINGONE_TOKEN_ENDPOINT_AUTH_METHOD || 'client_secret_basic',
+      discoveryUrl: process.env.MYCHART_PINGONE_DISCOVERY_URL || '',
+      scope: process.env.MYCHART_PINGONE_SCOPE || 'openid profile email',
+      redirectUri: process.env.MYCHART_PINGONE_REDIRECT_URI || `http://localhost:${PORT}/mychart-pingone/auth/callback`,
+      postLogoutRedirectUri: process.env.MYCHART_PINGONE_POST_LOGOUT_REDIRECT_URI || `${new URL(process.env.MYCHART_PINGONE_REDIRECT_URI || `http://localhost:${PORT}/mychart-pingone/auth/callback`).origin}/`
+    }
+  },
   scope: process.env.SCOPE || 'openid profile email',
   discoveryUrl: process.env.DISCOVERY_URL || 'https://openam-scp-1025.forgeblocks.com/am/oauth2/realms/root/realms/alpha/.well-known/openid-configuration',
   jwksUri: process.env.JWKS_URI || '',
   endSessionEndpoint: process.env.END_SESSION_ENDPOINT || '',
-  postLogoutRedirectUri: process.env.POST_LOGOUT_REDIRECT_URI || `${new URL(process.env.REDIRECT_URI || `http://localhost:${PORT}/auth/callback`).origin}/`,
   authorizationEndpoint: process.env.AUTHORIZATION_ENDPOINT || 'https://openam-scp-1025.forgeblocks.com/am/oauth2/alpha/authorize',
   tokenEndpoint: process.env.TOKEN_ENDPOINT || 'https://openam-scp-1025.forgeblocks.com/am/oauth2/alpha/access_token',
   userInfoEndpoint: process.env.USERINFO_ENDPOINT || 'https://openam-scp-1025.forgeblocks.com/am/oauth2/alpha/userinfo',
@@ -24,15 +46,100 @@ const CONFIG = {
   recoverAuthIndexValue: process.env.AIC_RECOVER_AUTH_INDEX_VALUE || ''
 };
 
-function getClientConfig(flow) {
+for (const [app, config] of Object.entries(CONFIG.apps)) {
+  if (!['client_secret_basic', 'client_secret_post'].includes(config.tokenEndpointAuthMethod)) {
+    throw new Error(`Unsupported token endpoint authentication method for ${app}: ${config.tokenEndpointAuthMethod}`);
+  }
+}
+
+function getAppConfig(app = 'epiccarelink') {
+  const appConfig = CONFIG.apps[app];
+  if (!appConfig) throw new Error(`Unknown demo app: ${app}`);
+  return appConfig;
+}
+
+function getClientConfig(app = 'epiccarelink') {
+  const appConfig = getAppConfig(app);
   return {
-    clientId: CONFIG.clientId,
-    clientSecret: CONFIG.clientSecret
+    clientId: appConfig.clientId,
+    clientSecret: appConfig.clientSecret,
+    tokenEndpointAuthMethod: appConfig.tokenEndpointAuthMethod
   };
 }
 
+function buildTokenRequest(client, tokenBody) {
+  const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+  if (client.tokenEndpointAuthMethod === 'client_secret_basic') {
+    const encodedCredentials = new URLSearchParams({
+      client_id: client.clientId,
+      client_secret: client.clientSecret
+    });
+    const credentials = encodedCredentials.toString().split('&').map(part => part.slice(part.indexOf('=') + 1));
+    headers.Authorization = `Basic ${Buffer.from(credentials.join(':')).toString('base64')}`;
+    tokenBody.delete('client_id');
+    tokenBody.delete('client_secret');
+  } else if (client.tokenEndpointAuthMethod === 'client_secret_post') {
+    tokenBody.set('client_id', client.clientId);
+    tokenBody.set('client_secret', client.clientSecret);
+  } else {
+    throw new Error(`Unsupported token endpoint authentication method: ${client.tokenEndpointAuthMethod}`);
+  }
+  return { method: 'POST', headers, body: tokenBody.toString() };
+}
+
 const sessions = new Map();
+const oauthErrors = new Set([
+  'invalid_request', 'unauthorized_client', 'access_denied', 'unsupported_response_type',
+  'invalid_scope', 'server_error', 'temporarily_unavailable', 'login_required',
+  'interaction_required', 'consent_required', 'invalid_client', 'invalid_grant'
+]);
+const validationErrors = new Set([
+  'ERR_JWT_EXPIRED', 'ERR_JWT_CLAIM_VALIDATION_FAILED', 'ERR_JWS_SIGNATURE_VERIFICATION_FAILED',
+  'ERR_JWKS_NO_MATCHING_KEY', 'ERR_JWKS_TIMEOUT', 'ERR_JWT_INVALID', 'ERR_JWS_INVALID'
+]);
+
+function logOidc(context, event, details = {}, level = 'debug') {
+  if (!OIDC_DEBUG && level === 'debug') return;
+  const entry = {
+    timestamp: new Date().toISOString(), level, event,
+    correlationId: context.correlationId, app: context.app, flow: context.flow,
+    elapsedMs: Math.max(0, Date.now() - context.startedAt)
+  };
+  // Only allow diagnostic metadata, never arbitrary request/response fields.
+  for (const key of ['hasCode', 'hasState', 'stateMatched', 'hasProviderError', 'usingFallback']) {
+    if (typeof details[key] === 'boolean') entry[key] = details[key];
+  }
+  for (const key of ['httpStatus', 'durationMs']) {
+    if (Number.isFinite(details[key])) entry[key] = details[key];
+  }
+  if (details.oauthError !== undefined) {
+    entry.oauthError = oauthErrors.has(details.oauthError) ? details.oauthError : 'redacted';
+  }
+  if (details.providerReason !== undefined) {
+    entry.providerReason = details.providerReason === 'Verification failed' ? 'verification_failed' : 'redacted';
+  }
+  if (details.validationCode !== undefined) {
+    entry.validationCode = validationErrors.has(details.validationCode) ? details.validationCode : 'validation_failed';
+  }
+  if (['MYCHART_PINGONE_CLIENT_ID', 'MYCHART_PINGONE_CLIENT_SECRET', 'MYCHART_PINGONE_DISCOVERY_URL',
+    'MYCHART_PINGONE_SCOPE', 'issuer', 'authorization_endpoint', 'token_endpoint', 'jwks_uri',
+    'userinfo_endpoint', 'end_session_endpoint'].includes(details.configurationField)) {
+    entry.configurationField = details.configurationField;
+  }
+  console[level === 'debug' ? 'log' : level](JSON.stringify(entry));
+}
+
 const indexHtml = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
+const epiccarelinkHtml = fs.readFileSync(path.join(__dirname, 'epiccarelink.html'), 'utf8');
+const mychartHtml = fs.readFileSync(path.join(__dirname, 'mychart.html'), 'utf8');
+
+function renderMyChartPage(app) {
+  const isPingOne = app === 'mychart-pingone';
+  return mychartHtml
+    .replaceAll('{{APP_PATH}}', `/${app}`)
+    .replaceAll('{{PROVIDER}}', isPingOne ? 'PingOne and DaVinci' : 'PingOne AIC')
+    .replace('{{RECOVERY_ACTION}}', isPingOne ? '' : '<a class="button button-secondary" href="/mychart/auth/recover">Recover MyChart account using PingOne AIC</a>');
+}
 
 function send(res, status, body, type = 'text/html; charset=utf-8') {
   res.writeHead(status, { 'Content-Type': type });
@@ -56,20 +163,71 @@ function sha256base64url(input) {
   return crypto.createHash('sha256').update(input).digest('base64url');
 }
 
-async function loadDiscovery() {
-  if (!CONFIG.discoveryUrl) return null;
+async function loadDiscovery(app = 'epiccarelink', diagnostic) {
+  const isPingOne = app === 'mychart-pingone';
+  const discoveryUrl = isPingOne ? getAppConfig(app).discoveryUrl : CONFIG.discoveryUrl;
+  if (!discoveryUrl) return null;
+  const startedAt = Date.now();
+  logOidc(diagnostic, 'discovery.started');
   try {
-    const response = await fetch(CONFIG.discoveryUrl);
+    const response = await fetch(discoveryUrl, isPingOne ? { signal: AbortSignal.timeout(10000) } : undefined);
+    logOidc(diagnostic, 'discovery.response', { httpStatus: response.status, durationMs: Date.now() - startedAt });
     if (!response.ok) throw new Error(`Discovery failed: ${response.status}`);
-    return await response.json();
+    const discovery = await response.json();
+    logOidc(diagnostic, 'discovery.completed', { durationMs: Date.now() - startedAt });
+    return discovery;
   } catch (error) {
-    console.warn('Discovery not loaded, using configured endpoints:', error.message);
+    logOidc(diagnostic, 'discovery.failed', { durationMs: Date.now() - startedAt, usingFallback: !isPingOne }, 'warn');
+    if (isPingOne) throw new Error('PingOne discovery is unavailable. Check MYCHART_PINGONE_DISCOVERY_URL and provider connectivity.');
     return null;
   }
 }
 
-async function resolveEndpoints() {
-  const discovery = await loadDiscovery();
+async function resolveEndpoints(app = 'epiccarelink', diagnostic) {
+  if (app === 'mychart-pingone') {
+    const config = getAppConfig(app);
+    for (const [key, name] of [
+      ['clientId', 'MYCHART_PINGONE_CLIENT_ID'],
+      ['clientSecret', 'MYCHART_PINGONE_CLIENT_SECRET'],
+      ['discoveryUrl', 'MYCHART_PINGONE_DISCOVERY_URL']
+    ]) {
+      if (!config[key]) {
+        logOidc(diagnostic, 'configuration.invalid', { configurationField: name }, 'error');
+        throw new Error(`Configure ${name} to use the MyChart PingOne demo.`);
+      }
+    }
+    if (new URL(config.discoveryUrl).protocol !== 'https:') {
+      logOidc(diagnostic, 'configuration.invalid', { configurationField: 'MYCHART_PINGONE_DISCOVERY_URL' }, 'error');
+      throw new Error('MYCHART_PINGONE_DISCOVERY_URL must use HTTPS.');
+    }
+    if (!config.scope.split(/\s+/).includes('openid')) {
+      logOidc(diagnostic, 'configuration.invalid', { configurationField: 'MYCHART_PINGONE_SCOPE' }, 'error');
+      throw new Error('MYCHART_PINGONE_SCOPE must include openid.');
+    }
+    const discovery = await loadDiscovery(app, diagnostic);
+    for (const name of ['issuer', 'authorization_endpoint', 'token_endpoint', 'jwks_uri']) {
+      if (!discovery?.[name] || new URL(discovery[name]).protocol !== 'https:') {
+        logOidc(diagnostic, 'discovery.invalid_metadata', { configurationField: name }, 'error');
+        throw new Error(`PingOne discovery must provide an HTTPS ${name}.`);
+      }
+    }
+    for (const name of ['userinfo_endpoint', 'end_session_endpoint']) {
+      if (discovery[name] && new URL(discovery[name]).protocol !== 'https:') {
+        logOidc(diagnostic, 'discovery.invalid_metadata', { configurationField: name }, 'error');
+        throw new Error(`PingOne discovery must provide an HTTPS ${name}.`);
+      }
+    }
+    return {
+      authorizationEndpoint: discovery.authorization_endpoint,
+      tokenEndpoint: discovery.token_endpoint,
+      userInfoEndpoint: discovery.userinfo_endpoint || null,
+      jwksUri: discovery.jwks_uri,
+      endSessionEndpoint: discovery.end_session_endpoint || null,
+      issuer: discovery.issuer,
+      claimsSupported: discovery.claims_supported || []
+    };
+  }
+  const discovery = await loadDiscovery(app, diagnostic);
   return {
     authorizationEndpoint: discovery?.authorization_endpoint || CONFIG.authorizationEndpoint,
     tokenEndpoint: discovery?.token_endpoint || CONFIG.tokenEndpoint,
@@ -156,22 +314,26 @@ function serializeForInlineScript(value) {
   );
 }
 
-function renderPostLoginPage({ flow, tokenResponse, idTokenClaims, userInfo, mappedClaims }) {
+function renderPostLoginPage({ flow, app, tokenResponse, idTokenClaims, userInfo, mappedClaims }) {
+  const isMyChart = app !== 'epiccarelink';
+  const appTitle = isMyChart ? 'Demo MyChart' : 'EpicCare Link';
+  const appPath = isMyChart ? `/${app}` : '';
+  const provider = app === 'mychart-pingone' ? 'PingOne and DaVinci' : 'PingOne AIC';
   const demoData = serializeForInlineScript({ flow, tokenResponse, idTokenClaims, userInfo, mappedClaims });
   const needsPasswordStep = flow === 'register' || flow === 'recover';
-  const passwordStepEyebrow = flow === 'recover' ? 'EpicCare Link | Account recovery' : 'EpicCare Link | Initial account setup';
-  const passwordStepTitle = flow === 'recover' ? 'Reset your EpicCare Link Password' : 'Choose an initial password';
+  const passwordStepEyebrow = flow === 'recover' ? `${appTitle} | Account recovery` : `${appTitle} | Initial account setup`;
+  const passwordStepTitle = flow === 'recover' ? `Reset your ${appTitle} password` : 'Choose an initial password';
   const passwordStepIntro = flow === 'recover'
-    ? 'Your provider identity is verified. Set a new password for this mock EpicCare Link experience.'
-    : 'Your provider identity is verified. Set a password for this mock EpicCare Link experience.';
-  const passwordStepAction = flow === 'recover' ? 'Reset EpicCare Link password' : 'Continue to EpicCare Link';
+    ? `Your identity is verified. Set a new password for this mock ${appTitle} experience.`
+    : `Your identity is verified. Set a password for this mock ${appTitle} experience.`;
+  const passwordStepAction = flow === 'recover' ? `Reset ${appTitle} password` : `Continue to ${appTitle}`;
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>EpicCare Link | BX-Health Demo</title>
+<title>${appTitle} | BX-Health Demo</title>
 <style>
 :root {
   --ink: #17324d;
@@ -280,13 +442,13 @@ h1 { margin: 0 0 9px; color: var(--ink); font-size: 27px; line-height: 1.18; }
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="/" aria-label="BX-Health demo home">
+    <a class="brand" href="${appPath || '/epiccarelink'}" aria-label="BX-Health demo home">
       <img src="https://demo.bxindustry.org/health/logo.svg" alt="" />
-      <span class="brand-name"><small>BX-Health demo</small><strong>EpicCare Link</strong></span>
+      <span class="brand-name"><small>BX-Health demo</small><strong>${appTitle}</strong></span>
     </a>
     <div class="topbar-actions">
-      <span class="demo-label">Epic Toolbox integration</span>
-      <form class="logout-form" action="/auth/logout" method="post">
+      <span class="demo-label">${isMyChart ? `${provider} identity demo` : 'Epic Toolbox integration'}</span>
+      <form class="logout-form" action="${appPath}/auth/logout" method="post">
         <input type="hidden" name="id_token_hint" value="${escapeHtml(tokenResponse.id_token || '')}" />
         <button class="top-link logout-button" type="submit">Logout</button>
       </form>
@@ -300,7 +462,7 @@ h1 { margin: 0 0 9px; color: var(--ink); font-size: 27px; line-height: 1.18; }
         <p class="eyebrow">${passwordStepEyebrow}</p>
         <h1 id="setup-title">${passwordStepTitle}</h1>
         <p class="intro">${passwordStepIntro}</p>
-        <p class="identity-line" id="provider-identity">Verified external provider</p>
+        <p class="identity-line" id="provider-identity">${isMyChart ? 'Verified demo patient' : 'Verified external provider'}</p>
         <form id="password-form" novalidate>
           <div class="field">
             <label for="initial-password">Password</label>
@@ -314,7 +476,7 @@ h1 { margin: 0 0 9px; color: var(--ink); font-size: 27px; line-height: 1.18; }
           <p class="form-error" id="password-error" role="alert" aria-live="polite"></p>
           <button class="primary-action" type="submit">${passwordStepAction}</button>
         </form>
-        <p class="fine-note"><strong>Epic Toolbox demo:</strong> Identity proofing and orchestration do not set or manage an Epic password. This mock checks that the entries match, then discards them without sending or saving either value.</p>
+        <p class="fine-note"><strong>${appTitle} demo:</strong> Identity proofing and orchestration do not set or manage an ${appTitle} password. This mock checks that the entries match, then discards them without sending or saving either value.</p>
         <p class="demo-footer">Demonstration only | No Epic account changes are made</p>
       </div>
     </section>
@@ -322,17 +484,17 @@ h1 { margin: 0 0 9px; color: var(--ink); font-size: 27px; line-height: 1.18; }
     <section class="dashboard-wrap" id="provider-dashboard" aria-labelledby="dashboard-title" tabindex="-1"${needsPasswordStep ? ' hidden' : ''}>
       <header class="welcome-panel">
         <div>
-          <p class="eyebrow">EpicCare Link | Provider workspace</p>
+          <p class="eyebrow">${appTitle} | Demo workspace</p>
           <h1 id="dashboard-title">Your demo workspace is ready</h1>
-          <p>Identity verification completed through Ping. The profile and OIDC data below are provided for this customer demonstration.</p>
+          <p>Authentication completed through ${provider}. The profile and OIDC data below are provided for this demonstration.</p>
         </div>
-        <form class="logout-form" action="/auth/logout" method="post">
+        <form class="logout-form" action="${appPath}/auth/logout" method="post">
           <input type="hidden" name="id_token_hint" value="${escapeHtml(tokenResponse.id_token || '')}" />
           <button class="top-link logout-button" type="submit" style="color:#fff">Logout</button>
         </form>
       </header>
       <section class="section" aria-labelledby="profile-heading">
-        <div class="section-heading"><div><h2 id="profile-heading">Verified provider profile</h2><p>Business-friendly identity fields mapped from the verified claims.</p></div></div>
+        <div class="section-heading"><div><h2 id="profile-heading">${isMyChart ? 'Verified demo patient profile' : 'Verified provider profile'}</h2><p>Business-friendly identity fields mapped from the verified claims.</p></div></div>
         <dl class="profile-grid" id="mapped-claims"></dl>
       </section>
       <section class="section" aria-labelledby="tokens-heading">
@@ -468,8 +630,8 @@ h1 { margin: 0 0 9px; color: var(--ink); font-size: 27px; line-height: 1.18; }
       });
     }
 
-    const identity = demoData.mappedClaims['Full Name'] || demoData.mappedClaims['Email Address'] || demoData.idTokenClaims.email || demoData.idTokenClaims.sub || 'Verified external provider';
-    document.getElementById('provider-identity').textContent = 'Verified provider: ' + formatValue(identity);
+    const identity = demoData.mappedClaims['Full Name'] || demoData.mappedClaims['Email Address'] || demoData.idTokenClaims.email || demoData.idTokenClaims.sub;
+    document.getElementById('provider-identity').textContent = '${isMyChart ? 'Verified demo patient' : 'Verified provider'}: ' + formatValue(identity);
 
     passwordForm.addEventListener('submit', function(event) {
       event.preventDefault();
@@ -498,13 +660,16 @@ h1 { margin: 0 0 9px; color: var(--ink); font-size: 27px; line-height: 1.18; }
 </html>`;
 }
 
-function renderResultPage({ flow, endpoints, tokenResponse, idTokenClaims, userInfo, mappedClaims, error }) {
+function renderResultPage({ flow, app = 'epiccarelink', endpoints, tokenResponse, idTokenClaims, userInfo, mappedClaims, error, correlationId }) {
+  const appTitle = app === 'epiccarelink' ? 'EpicCare Link' : 'Demo MyChart';
+  const appPath = app === 'epiccarelink' ? '' : `/${app}`;
   const payload = tokenResponse ? JSON.stringify(tokenResponse, null, 2) : '';
   const idPayload = idTokenClaims ? JSON.stringify(idTokenClaims, null, 2) : '';
   const uiPayload = userInfo ? JSON.stringify(userInfo, null, 2) : '';
   const mappedRows = Object.entries(mappedClaims || {}).map(([k, v]) => `
     <tr><th>${escapeHtml(k)}</th><td>${escapeHtml(v || '—')}</td></tr>`).join('');
-  const client = getClientConfig(flow === 'register' ? 'register' : 'login');
+  const client = getClientConfig(app);
+  const appConfig = getAppConfig(app);
   const allClaimRows = Object.entries(idTokenClaims || {}).map(([k, v]) => {
     const rendered = typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v);
     return `\n    <tr><th>${escapeHtml(k)}</th><td>${escapeHtml(rendered || '—')}</td></tr>`;
@@ -515,7 +680,7 @@ function renderResultPage({ flow, endpoints, tokenResponse, idTokenClaims, userI
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>BX-Health OIDC Result</title>
+<title>${appTitle} OIDC Result</title>
 <style>
 :root {
   --bg: #0d1b2a; --panel: #ffffff; --panel-soft: #f4f7fb; --text: #132238; --muted: #5d6b80;
@@ -551,11 +716,12 @@ pre { margin: 0; padding: 14px; background: var(--panel-soft); border: 1px solid
 <body>
 <div class="shell">
   <section class="hero">
-    <div class="badge">OIDC ${escapeHtml(flow || 'login')} complete</div>
-    <h1>BX-Health token viewer</h1>
-    <p>This page shows the raw token response, verified ID token claims, optional UserInfo claims, and the business mappings you requested for the EpicCare-style demo app.</p>
+    <div class="badge">OIDC ${escapeHtml(flow || 'login')} ${error ? 'failed' : 'complete'}</div>
+    <h1>${appTitle} token viewer</h1>
+    <p>This page shows the raw token response, verified ID token claims, optional UserInfo claims, and mapped business claims for this demo app.</p>
   </section>
   ${error ? `<div class="error">${escapeHtml(error)}</div>` : ''}
+  ${correlationId ? `<p>Diagnostic reference: <code>${escapeHtml(correlationId)}</code></p>` : ''}
   <section class="grid">
     <article class="card">
       <h2>Mapped claims</h2>
@@ -564,15 +730,15 @@ pre { margin: 0; padding: 14px; background: var(--panel-soft); border: 1px solid
       <div class="meta">
         <div class="meta-row"><strong>Flow</strong><span>${escapeHtml(flow || 'login')}</span></div>
         <div class="meta-row"><strong>Client ID</strong><span>${escapeHtml(client.clientId)}</span></div>
-        <div class="meta-row"><strong>Redirect URI</strong><span>${escapeHtml(CONFIG.redirectUri)}</span></div>
+        <div class="meta-row"><strong>Redirect URI</strong><span>${escapeHtml(appConfig.redirectUri)}</span></div>
         <div class="meta-row"><strong>Authorization endpoint</strong><span>${escapeHtml(endpoints.authorizationEndpoint)}</span></div>
         <div class="meta-row"><strong>Token endpoint</strong><span>${escapeHtml(endpoints.tokenEndpoint)}</span></div>
         <div class="meta-row"><strong>UserInfo endpoint</strong><span>${escapeHtml(endpoints.userInfoEndpoint)}</span></div>
         <div class="meta-row"><strong>Issuer</strong><span>${escapeHtml(endpoints.issuer)}</span></div>
       </div>
       <div class="actions">
-        <a class="btn btn-primary" href="/">Back to login</a>
-        <a class="btn btn-secondary" href="/auth/register">Run registration again</a>
+        <a class="btn btn-primary" href="${appPath || '/epiccarelink'}">Back to login</a>
+        <a class="btn btn-secondary" href="${appPath}/auth/register">Run registration again</a>
       </div>
     </article>
     <article class="card">
@@ -592,26 +758,28 @@ pre { margin: 0; padding: 14px; background: var(--panel-soft); border: 1px solid
 </html>`;
 }
 
-async function handleAuthorize(req, res, flow) {
-  const endpoints = await resolveEndpoints();
+async function handleAuthorize(req, res, flow, app = 'epiccarelink') {
+  logOidc(req.oidc, 'authorization.started');
+  const endpoints = await resolveEndpoints(app, req.oidc);
   const state = randomString(24);
   const nonce = randomString(24);
   const codeVerifier = randomString(48);
   const codeChallenge = sha256base64url(codeVerifier);
-  sessions.set(state, { codeVerifier, nonce, flow, createdAt: Date.now() });
+  sessions.set(state, { codeVerifier, nonce, flow, app, createdAt: Date.now(), correlationId: req.oidc.correlationId });
 
-  const client = getClientConfig(flow);
+  const client = getClientConfig(app);
+  const appConfig = getAppConfig(app);
   const url = new URL(endpoints.authorizationEndpoint);
   url.searchParams.set('client_id', client.clientId);
-  url.searchParams.set('redirect_uri', CONFIG.redirectUri);
+  url.searchParams.set('redirect_uri', appConfig.redirectUri);
   url.searchParams.set('response_type', 'code');
   url.searchParams.set('flow', flow);
-  url.searchParams.set('scope', CONFIG.scope);
+  url.searchParams.set('scope', app === 'mychart-pingone' ? appConfig.scope : CONFIG.scope);
   url.searchParams.set('state', state);
   url.searchParams.set('nonce', nonce);
   url.searchParams.set('code_challenge', codeChallenge);
   url.searchParams.set('code_challenge_method', 'S256');
-  url.searchParams.set('claims', buildClaimsParameter());
+  if (app !== 'mychart-pingone') url.searchParams.set('claims', buildClaimsParameter());
 
   const authIndexType = flow === 'register'
     ? CONFIG.registerAuthIndexType
@@ -619,16 +787,18 @@ async function handleAuthorize(req, res, flow) {
   const authIndexValue = flow === 'register'
     ? CONFIG.registerAuthIndexValue
     : flow === 'recover' ? CONFIG.recoverAuthIndexValue : '';
-  if (authIndexType && authIndexValue) {
+  if (app !== 'mychart-pingone' && authIndexType && authIndexValue) {
     url.searchParams.set('authIndexType', authIndexType);
     url.searchParams.set('authIndexValue', authIndexValue);
   }
 
+  logOidc(req.oidc, 'authorization.redirect');
   res.writeHead(302, { Location: url.toString() });
   res.end();
 }
 
-async function handleLogout(req, res) {
+async function handleLogout(req, res, app = 'epiccarelink') {
+  logOidc(req.oidc, 'logout.started');
   if (req.method !== 'POST') {
     res.writeHead(405, { Allow: 'POST' });
     return res.end('Method not allowed');
@@ -639,6 +809,7 @@ async function handleLogout(req, res) {
   for await (const chunk of req) {
     bodySize += chunk.length;
     if (bodySize > 65536) {
+      logOidc(req.oidc, 'logout.request_too_large', {}, 'warn');
       return send(res, 413, 'Logout request is too large.', 'text/plain; charset=utf-8');
     }
     chunks.push(chunk);
@@ -647,18 +818,25 @@ async function handleLogout(req, res) {
   const form = new URLSearchParams(Buffer.concat(chunks).toString('utf8'));
   const idTokenHint = form.get('id_token_hint');
   if (!idTokenHint) {
+    logOidc(req.oidc, 'logout.missing_token_hint', {}, 'warn');
     return send(res, 400, 'ID token hint is required for logout.', 'text/plain; charset=utf-8');
   }
 
-  const endpoints = await resolveEndpoints();
+  const endpoints = await resolveEndpoints(app, req.oidc);
   if (!endpoints.endSessionEndpoint) {
-    return send(res, 503, 'Ping end-session endpoint is unavailable. Configure END_SESSION_ENDPOINT.', 'text/plain; charset=utf-8');
+    logOidc(req.oidc, 'logout.endpoint_unavailable', {}, 'warn');
+    return send(res, 503, app === 'mychart-pingone'
+      ? 'PingOne discovery does not advertise an end-session endpoint.'
+      : 'Ping end-session endpoint is unavailable. Configure END_SESSION_ENDPOINT.', 'text/plain; charset=utf-8');
   }
 
+  const client = getClientConfig(app);
+  const appConfig = getAppConfig(app);
   const url = new URL(endpoints.endSessionEndpoint);
   url.searchParams.set('id_token_hint', idTokenHint);
-  url.searchParams.set('client_id', CONFIG.clientId);
-  url.searchParams.set('post_logout_redirect_uri', CONFIG.postLogoutRedirectUri);
+  url.searchParams.set('client_id', client.clientId);
+  url.searchParams.set('post_logout_redirect_uri', appConfig.postLogoutRedirectUri);
+  logOidc(req.oidc, 'logout.redirect');
   res.writeHead(302, {
     Location: url.toString(),
     'Cache-Control': 'no-store'
@@ -666,26 +844,44 @@ async function handleLogout(req, res) {
   res.end();
 }
 
-async function handleCallback(req, res, requestUrl) {
+async function handleCallback(req, res, requestUrl, app = 'epiccarelink') {
   const code = requestUrl.searchParams.get('code');
   const state = requestUrl.searchParams.get('state');
   const error = requestUrl.searchParams.get('error');
   const errorDescription = requestUrl.searchParams.get('error_description');
-  const endpoints = await resolveEndpoints();
+  const session = state ? sessions.get(state) : null;
+  const stateMatched = Boolean(session && session.app === app);
+  if (stateMatched) {
+    req.oidc.correlationId = session.correlationId;
+    req.oidc.flow = session.flow;
+    req.oidc.startedAt = session.createdAt;
+    res.setHeader('X-OIDC-Correlation-ID', req.oidc.correlationId);
+  }
+  logOidc(req.oidc, 'callback.received', { hasCode: Boolean(code), hasState: Boolean(state), stateMatched, hasProviderError: Boolean(error) });
 
   if (error) {
+    logOidc(req.oidc, 'callback.provider_error', {
+      oauthError: error, providerReason: errorDescription, stateMatched
+    }, 'warn');
+    if (stateMatched) sessions.delete(state);
+    const endpoints = await resolveEndpoints(app, req.oidc);
     return send(res, 400, renderResultPage({
       flow: 'error',
+      app,
+      correlationId: req.oidc.correlationId,
       endpoints,
       mappedClaims: {},
       error: `${error}${errorDescription ? `: ${errorDescription}` : ''}`
     }));
   }
 
-  const session = state ? sessions.get(state) : null;
-  if (!session || !code) {
+  if (!stateMatched || !code) {
+    logOidc(req.oidc, 'callback.rejected', { hasCode: Boolean(code), hasState: Boolean(state), stateMatched }, 'warn');
+    const endpoints = await resolveEndpoints(app, req.oidc);
     return send(res, 400, renderResultPage({
       flow: 'error',
+      app,
+      correlationId: req.oidc.correlationId,
       endpoints,
       mappedClaims: {},
       error: 'Missing or expired state/code. Start the flow again from the login page.'
@@ -694,30 +890,32 @@ async function handleCallback(req, res, requestUrl) {
 
   sessions.delete(state);
 
-  const client = getClientConfig(session.flow);
+  const endpoints = await resolveEndpoints(app, req.oidc);
+  const client = getClientConfig(session.app);
+  const appConfig = getAppConfig(session.app);
   const tokenBody = new URLSearchParams({
     grant_type: 'authorization_code',
     code,
-    redirect_uri: CONFIG.redirectUri,
+    redirect_uri: appConfig.redirectUri,
     client_id: client.clientId,
     code_verifier: session.codeVerifier
   });
 
   let tokenResponse;
+  const tokenStartedAt = Date.now();
+  logOidc(req.oidc, 'token_exchange.started');
   try {
-    tokenBody.set('client_secret', client.clientSecret);
-
-    const tokenRes = await fetch(endpoints.tokenEndpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      body: tokenBody.toString()
-    });
+    const tokenRes = await fetch(endpoints.tokenEndpoint, buildTokenRequest(client, tokenBody));
+    logOidc(req.oidc, 'token_exchange.response', { httpStatus: tokenRes.status, durationMs: Date.now() - tokenStartedAt });
     tokenResponse = await tokenRes.json();
     if (!tokenRes.ok) {
+      logOidc(req.oidc, 'token_exchange.failed', {
+        httpStatus: tokenRes.status, oauthError: tokenResponse.error, durationMs: Date.now() - tokenStartedAt
+      }, 'warn');
       return send(res, 400, renderResultPage({
         flow: session.flow,
+        app: session.app,
+        correlationId: req.oidc.correlationId,
         endpoints,
         tokenResponse,
         mappedClaims: {},
@@ -725,21 +923,29 @@ async function handleCallback(req, res, requestUrl) {
       }));
     }
   } catch (err) {
+    logOidc(req.oidc, 'token_exchange.failed', { durationMs: Date.now() - tokenStartedAt }, 'warn');
     return send(res, 500, renderResultPage({
       flow: session.flow,
+      app: session.app,
+      correlationId: req.oidc.correlationId,
       endpoints,
       mappedClaims: {},
-      error: `Token exchange error: ${err.message}`
+      error: 'Token exchange request or response could not be processed.'
     }));
   }
 
   let idTokenClaims;
+  const validationStartedAt = Date.now();
+  logOidc(req.oidc, 'id_token_validation.started');
   try {
     idTokenClaims = await verifyIdToken(tokenResponse.id_token, session.nonce, endpoints, client.clientId);
+    logOidc(req.oidc, 'id_token_validation.completed', { durationMs: Date.now() - validationStartedAt });
   } catch (err) {
-    console.warn('ID token validation failed:', err.message);
+    logOidc(req.oidc, 'id_token_validation.failed', { validationCode: err.code || 'validation_failed', durationMs: Date.now() - validationStartedAt }, 'warn');
     return send(res, 400, renderResultPage({
       flow: session.flow,
+      app: session.app,
+      correlationId: req.oidc.correlationId,
       endpoints,
       mappedClaims: {},
       error: 'ID token validation failed.'
@@ -748,19 +954,30 @@ async function handleCallback(req, res, requestUrl) {
 
   let userInfo = null;
   if (tokenResponse.access_token && endpoints.userInfoEndpoint) {
+    const userInfoStartedAt = Date.now();
+    logOidc(req.oidc, 'userinfo.started');
     try {
       const uiRes = await fetch(endpoints.userInfoEndpoint, {
         headers: { Authorization: `Bearer ${tokenResponse.access_token}` }
       });
-      if (uiRes.ok) userInfo = await uiRes.json();
+      if (uiRes.ok) {
+        userInfo = await uiRes.json();
+        logOidc(req.oidc, 'userinfo.completed', { httpStatus: uiRes.status, durationMs: Date.now() - userInfoStartedAt });
+      } else {
+        logOidc(req.oidc, 'userinfo.failed', { httpStatus: uiRes.status, durationMs: Date.now() - userInfoStartedAt }, 'warn');
+      }
     } catch (err) {
-      console.warn('UserInfo call failed:', err.message);
+      logOidc(req.oidc, 'userinfo.failed', { durationMs: Date.now() - userInfoStartedAt }, 'warn');
     }
+  } else {
+    logOidc(req.oidc, 'userinfo.skipped');
   }
 
   const mappedClaims = extractMappedClaims(idTokenClaims, userInfo);
+  logOidc(req.oidc, 'callback.completed');
   return send(res, 200, renderPostLoginPage({
     flow: session.flow,
+    app: session.app,
     tokenResponse,
     idTokenClaims,
     userInfo,
@@ -770,18 +987,40 @@ async function handleCallback(req, res, requestUrl) {
 
 const server = http.createServer(async (req, res) => {
   const requestUrl = new URL(req.url, `http://${req.headers.host}`);
+  const pathname = requestUrl.pathname;
 
-  if (requestUrl.pathname === '/') return send(res, 200, indexHtml);
-  if (requestUrl.pathname === '/auth/login') return handleAuthorize(req, res, 'login');
-  if (requestUrl.pathname === '/auth/register') return handleAuthorize(req, res, 'register');
-  if (requestUrl.pathname === '/auth/recover') return handleAuthorize(req, res, 'recover');
-  if (requestUrl.pathname === '/auth/logout') return handleLogout(req, res);
-  if (requestUrl.pathname === '/auth/callback') return handleCallback(req, res, requestUrl);
-  if (requestUrl.pathname === '/health') return send(res, 200, JSON.stringify({ status: 'ok' }), 'application/json');
+  if (pathname === '/health') return send(res, 200, JSON.stringify({ status: 'ok' }), 'application/json');
+  if (pathname === '/') return send(res, 200, indexHtml);
+  if (pathname === '/epiccarelink' || pathname === '/epiccarelink/') return send(res, 200, epiccarelinkHtml);
+  if (pathname === '/mychart' || pathname === '/mychart/') return send(res, 200, renderMyChartPage('mychart'));
+  if (pathname === '/mychart-pingone' || pathname === '/mychart-pingone/') return send(res, 200, renderMyChartPage('mychart-pingone'));
+
+  const app = pathname.startsWith('/mychart-pingone/') ? 'mychart-pingone'
+    : pathname.startsWith('/mychart/') ? 'mychart' : 'epiccarelink';
+  const appPath = app === 'epiccarelink' ? '' : `/${app}`;
+  const routePath = pathname.slice(appPath.length);
+  const requestedFlow = routePath.slice('/auth/'.length);
+  req.oidc = {
+    correlationId: crypto.randomUUID(), app,
+    flow: ['login', 'register', 'recover', 'logout'].includes(requestedFlow) ? requestedFlow : 'unknown',
+    startedAt: Date.now()
+  };
+  res.setHeader('X-OIDC-Correlation-ID', req.oidc.correlationId);
+
+  try {
+    if (routePath === '/auth/login') return await handleAuthorize(req, res, 'login', app);
+    if (routePath === '/auth/register') return await handleAuthorize(req, res, 'register', app);
+    if (routePath === '/auth/recover' && app !== 'mychart-pingone') return await handleAuthorize(req, res, 'recover', app);
+    if (routePath === '/auth/logout') return await handleLogout(req, res, app);
+    if (routePath === '/auth/callback') return await handleCallback(req, res, requestUrl, app);
+  } catch (error) {
+    logOidc(req.oidc, 'request.failed', {}, 'error');
+    return send(res, 503, `<h1>Authentication unavailable</h1><p>Check this demo's OIDC configuration and provider connectivity.</p><p>Diagnostic reference: <code>${escapeHtml(req.oidc.correlationId)}</code></p><a href="${appPath || '/epiccarelink'}">Back to login</a>`);
+  }
 
   send(res, 404, '<h1>Not found</h1>');
 });
 
 server.listen(PORT, () => {
-  console.log(`BX-Health Epic OIDC demo listening on http://localhost:${PORT}`);
+  console.log(`BX-Health EpicCare Link and MyChart OIDC demos listening on http://localhost:${PORT}`);
 });

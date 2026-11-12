@@ -1,8 +1,8 @@
 {
   "name": "bx-health-epic-oidc-demo",
-  "version": "1.0.9",
+  "version": "1.0.16",
   "private": true,
-  "description": "BX-Health EpicCare-style OIDC demo for PingOne AIC",
+  "description": "BX-Health EpicCare Link and MyChart OIDC demos for PingOne AIC and PingOne with DaVinci",
   "dependencies": {
     "jose": "^5.10.0"
   }

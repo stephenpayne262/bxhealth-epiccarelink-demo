@@ -3,390 +3,130 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BX-Health EpicCare Link</title>
+  <title>PingOne Verify and Protect for Epic Toolbox</title>
   <style>
     :root {
-      --artifact-background: var(--theme-background, #ffffff);
-      --artifact-background-light: var(--theme-background-light, #f5f7fa);
-      --artifact-background-mid: var(--theme-background-mid, #ebeff5);
-      --artifact-border-light: var(--theme-border-light, #d8dde6);
-      --artifact-border-dark: var(--theme-border-dark, #b9c3d0);
-      --artifact-primary-brand: var(--theme-primary-brand, #0b4c8c);
-      --artifact-primary-highlight: var(--theme-primary-highlight, #123d73);
-      --artifact-primary-hover: var(--theme-primary-hover, #0a3561);
-      --artifact-selected: var(--theme-selected, #e9f1fb);
-      --artifact-text-primary: var(--theme-text-primary, #14233a);
-      --artifact-text-secondary: var(--theme-text-secondary, #5c6b80);
-      --artifact-text-highlight: var(--theme-text-highlight, #fff8e5);
-      --artifact-success-bg: #e8f5ee;
-      --artifact-success-text: #184f2b;
-      --artifact-accent-soft: #dceaf8;
-      --artifact-panel-overlay: rgba(11, 76, 140, 0.84);
-      --artifact-shadow: 0 18px 38px rgba(18, 35, 58, 0.16);
-    }
-    html[data-theme='dark'] {
-      --artifact-success-bg: #143425;
-      --artifact-success-text: #d8f5df;
-      --artifact-accent-soft: #17314a;
-      --artifact-panel-overlay: rgba(8, 30, 54, 0.86);
-      --artifact-shadow: 0 24px 50px rgba(0, 0, 0, 0.32);
+      color-scheme: light;
+      --ink: #19344a;
+      --muted: #526b7e;
+      --line: #d6e0e8;
+      --blue: #176f9d;
+      --blue-dark: #115579;
+      --canvas: #f3f7f9;
     }
     * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: Inter, Arial, sans-serif;
-      background: var(--artifact-background-light);
-      color: var(--artifact-text-primary);
-      min-height: 100vh;
-    }
-    .shell {
-      min-height: 100vh;
-      display: grid;
-      grid-template-columns: minmax(360px, 520px) 1fr;
-    }
-    .login-pane {
-      background: var(--artifact-background);
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      padding: 32px;
-      border-right: 1px solid var(--artifact-border-light);
-    }
-    .login-wrap {
-      max-width: 400px;
-      width: 100%;
-      margin: auto;
-    }
-    .top-brand {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 20px;
-      gap: 16px;
-    }
-    .top-brand img {
-      height: 34px;
-      width: auto;
-      display: block;
-    }
-    .product-chip {
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      padding: 7px 10px;
-      border-radius: 999px;
-      color: var(--artifact-primary-highlight);
-      background: var(--artifact-accent-soft);
-      border: 1px solid var(--artifact-border-light);
-    }
-    .product-mark {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 4px;
-    }
-    .app-version {
-      color: var(--artifact-text-secondary);
-      font-size: 10px;
-      line-height: 1.3;
-    }
-    .card {
-      background: var(--artifact-background);
-      border: 1px solid var(--artifact-border-light);
-      border-radius: 16px;
-      padding: 28px 24px;
-      box-shadow: var(--artifact-shadow);
-    }
-    h1 {
-      font-size: 30px;
-      line-height: 1.1;
-      margin: 0 0 6px;
-      color: var(--artifact-primary-highlight);
-    }
-    .login-title { font-size: 27px; }
-    .subhead {
-      font-size: 14px;
-      line-height: 1.55;
-      color: var(--artifact-text-secondary);
-      margin: 0 0 22px;
-    }
-    .actions {
-      display: grid;
-      gap: 12px;
-      margin-top: 18px;
-    }
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 100%;
-      min-height: 46px;
-      padding: 12px 16px;
-      border-radius: 10px;
-      text-decoration: none;
-      font-size: 14px;
-      font-weight: 700;
-      border: 1px solid transparent;
-      transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease, border-color 0.18s ease;
-      cursor: pointer;
-    }
-    .btn:hover, .btn:focus-visible {
-      transform: translateY(-1px);
-      box-shadow: 0 8px 20px rgba(18, 35, 58, 0.14);
-    }
-    .btn-primary {
-      background: var(--artifact-primary-highlight);
-      color: var(--artifact-background);
-    }
-    .btn-primary:hover, .btn-primary:focus-visible {
-      background: var(--artifact-primary-hover);
-    }
-    .btn-secondary {
-      background: var(--artifact-background);
-      color: var(--artifact-primary-highlight);
-      border-color: var(--artifact-primary-brand);
-    }
-    .btn-secondary:hover, .btn-secondary:focus-visible {
-      background: var(--artifact-selected);
-    }
-    .link-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      margin-top: 16px;
-      font-size: 13px;
-      line-height: 1.5;
-    }
-    .link-row a, .help a, .fine-print a {
-      color: var(--artifact-primary-brand);
-      text-decoration: none;
-      font-weight: 600;
-    }
-    .link-row a:hover, .help a:hover, .fine-print a:hover { text-decoration: underline; }
-    .help {
-      margin-top: 26px;
-      padding-top: 18px;
-      border-top: 1px solid var(--artifact-border-light);
-      font-size: 13px;
-      color: var(--artifact-text-secondary);
-      line-height: 1.6;
-    }
-    .help strong {
-      display: block;
-      color: var(--artifact-text-primary);
-      margin-bottom: 4px;
-    }
-    .fine-print {
-      margin-top: 16px;
-      font-size: 11px;
-      line-height: 1.55;
-      color: var(--artifact-text-secondary);
-    }
-    .pane-footer {
-      width: 100%;
-      max-width: 400px;
-      margin: 0 auto;
-      padding-top: 14px;
-      border-top: 1px solid var(--artifact-border-light);
-      color: var(--artifact-text-secondary);
-      font-size: 11px;
-      line-height: 1.5;
-    }
-    .visual-pane {
-      position: relative;
-      background:
-        linear-gradient(135deg, var(--artifact-panel-overlay), rgba(11, 76, 140, 0.56)),
-        url('https://storage.googleapis.com/encore-prod-baseline-images/health-bg.jpeg') center/cover no-repeat;
-      display: flex;
-      align-items: flex-end;
-      justify-content: flex-start;
-      padding: 44px;
-      overflow: hidden;
-    }
-    .visual-card {
-      max-width: 560px;
-      color: var(--artifact-background);
-      animation: rise 0.55s ease both;
-    }
-    .visual-card img {
-      height: 52px;
-      width: auto;
-      display: block;
-      margin-bottom: 20px;
-    }
-    .eyebrow {
-      font-size: 12px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      opacity: 0.88;
-      margin-bottom: 12px;
-      font-weight: 700;
-    }
-    .visual-card h2 {
-      font-size: 42px;
-      line-height: 1.04;
-      margin: 0 0 14px;
-      color: var(--artifact-background);
-    }
-    .visual-card p {
-      font-size: 16px;
-      line-height: 1.65;
-      margin: 0 0 18px;
-      max-width: 52ch;
-      opacity: 0.98;
-    }
-    .feature-list {
-      display: grid;
-      gap: 10px;
-      margin-top: 20px;
-      font-size: 14px;
-    }
-    .feature-list span {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      padding: 9px 12px;
-      border-radius: 999px;
-      background: rgba(255,255,255,0.12);
-      border: 1px solid rgba(255,255,255,0.16);
-      width: fit-content;
-    }
-    .resource-links {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px 24px;
-      margin-top: 26px;
-      padding-top: 18px;
-      border-top: 1px solid rgba(255,255,255,0.24);
-    }
-    .resource-link {
-      display: grid;
-      gap: 4px;
-      color: #fff;
-      font-size: 13px;
-      font-weight: 700;
-      line-height: 1.4;
-      text-decoration: none;
-    }
-    .resource-link span {
-      color: #d9eaf3;
-      font-size: 11px;
-      font-weight: 500;
-    }
-    .resource-link:hover { text-decoration: underline; }
-    .token-note {
-      margin-top: 14px;
-      padding: 10px 12px;
-      border-radius: 10px;
-      background: var(--artifact-success-bg);
-      color: var(--artifact-success-text);
-      font-size: 12px;
-      line-height: 1.5;
-      border: 1px solid rgba(0,0,0,0.06);
-    }
-    @keyframes rise {
-      from { opacity: 0; transform: translateY(14px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    @media (max-width: 980px) {
-      .shell { grid-template-columns: 1fr; }
-      .visual-pane { min-height: 320px; padding: 28px; }
-      .login-pane { min-height: auto; }
-      .visual-card h2 { font-size: 34px; }
-    }
-    @media (max-width: 480px) {
-      .login-pane { padding: 22px 18px; }
-      .top-brand { align-items: flex-start; }
-      .product-chip { max-width: 150px; text-align: right; }
-      .login-title { font-size: 24px; }
-      .link-row { align-items: flex-start; flex-direction: column; }
-    }
-    @media print {
-      body {
-        margin: 0;
-        padding: 0.4in 0.6in;
-        background: #fff;
-        print-color-adjust: exact;
-        -webkit-print-color-adjust: exact;
-      }
-      .shell, main {
-        max-width: 100% !important;
-        width: 100% !important;
-        display: block !important;
-      }
-      .visual-pane {
-        min-height: 220px !important;
-        margin-top: 16px;
-      }
-      .card {
-        box-shadow: none !important;
-        border: 1px solid rgba(0,0,0,0.08) !important;
-      }
-      *, *::before, *::after {
-        animation: none !important;
-        transition: none !important;
-      }
+    body { margin: 0; background: var(--canvas); color: var(--ink); font-family: Arial, sans-serif; line-height: 1.6; }
+    a { color: var(--blue-dark); }
+    a:focus-visible { outline: 3px solid #e6a921; outline-offset: 4px; }
+    .topbar { background: #fff; border-bottom: 1px solid var(--line); }
+    .topbar-inner { max-width: 1160px; margin: auto; padding: 18px 24px; display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+    .brand { display: grid; line-height: 1.3; }
+    .brand strong { font-size: 21px; letter-spacing: -0.03em; }
+    .brand span { color: var(--muted); font-size: 12px; }
+    .version { color: var(--muted); font-size: 12px; white-space: nowrap; }
+    main { max-width: 1160px; margin: auto; padding: 40px 24px 56px; }
+    .hero { padding: clamp(26px, 5vw, 54px); border-radius: 16px; background: linear-gradient(120deg, #123d61, #176f9d); color: #fff; }
+    .eyebrow { margin: 0 0 10px; font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+    h1 { max-width: 22ch; margin: 0 0 18px; font-size: clamp(30px, 4vw, 46px); line-height: 1.12; letter-spacing: -0.03em; }
+    .hero p:last-child { max-width: 75ch; margin: 0; color: #e3f0f7; font-size: 17px; }
+    section { margin-top: 36px; }
+    h2 { margin: 0 0 8px; font-size: 26px; line-height: 1.3; }
+    .section-intro { margin: 0 0 20px; color: var(--muted); }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+    .card { padding: 26px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+    .card h3 { margin: 0 0 10px; font-size: 21px; line-height: 1.35; }
+    .card p { margin: 0 0 18px; color: var(--muted); font-size: 15px; }
+    .card ul { padding-left: 20px; margin: 0 0 20px; color: var(--muted); font-size: 14px; }
+    .resource-link { font-size: 14px; font-weight: 700; text-underline-offset: 3px; }
+    .demo-card { display: flex; flex-direction: column; align-items: flex-start; }
+    .badge { display: inline-block; margin-bottom: 14px; padding: 3px 10px; border-radius: 999px; background: #e8f4ed; color: #20623e; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+    .badge-planned { background: #eef1f4; color: #526173; }
+    .button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; margin-top: auto; padding: 9px 16px; border-radius: 6px; background: var(--blue); color: #fff; text-align: center; text-decoration: none; font-size: 14px; font-weight: 700; }
+    .button:hover { background: var(--blue-dark); }
+    .planned { border-style: dashed; background: #fafcfd; }
+    .planned-note { margin-top: auto; color: #526173; font-size: 13px; font-weight: 700; }
+    .notice { margin: 24px 0 0; padding: 15px 18px; border: 1px solid #e8dba9; border-radius: 8px; background: #fff8df; color: #624d11; font-size: 13px; }
+    footer { padding: 20px 24px; border-top: 1px solid var(--line); background: #fff; color: var(--muted); text-align: center; font-size: 11px; }
+    @media (max-width: 680px) {
+      .grid { grid-template-columns: 1fr; }
+      .topbar-inner { padding: 16px 18px; }
+      .brand strong { font-size: 18px; }
+      main { padding: 24px 18px 36px; }
+      .card { padding: 22px; }
     }
   </style>
 </head>
 <body>
-  <main class="shell">
-    <section class="login-pane">
-      <div class="login-wrap">
-        <div class="top-brand">
-          <img src="https://demo.bxindustry.org/health/logo.svg" alt="BX-Health logo" />
-          <div class="product-mark">
-            <div class="product-chip">Epic Toolbox Integration</div>
-            <span class="app-version">Version 1.0.9</span>
-          </div>
-        </div>
-        <div class="card">
-          <h1 class="login-title">Mock EpicCare Link Demo Application</h1>
-          <p class="subhead">A customer demonstration of verified onboarding and account recovery for external providers.</p>
-          <div class="actions">
-            <a class="btn btn-primary" href="/auth/register">Register with Ping</a>
-            <a class="btn btn-secondary" href="/auth/login">Sign in with Ping</a>
-            <a class="btn btn-secondary" href="/auth/recover">Recover Account with Ping</a>
-          </div>
-          <div class="token-note">Register and account recovery include a mock password step. Sign-in goes directly to the provider workspace after Ping verifies your identity.</div>
-          <div id="support" class="help">
-            <strong>Problems logging in?</strong>
-            Contact the BX-Health Help Desk at <a href="tel:18336914357">1-833-691-4357</a> or update the support block in <code>index.html</code> for your customer story.
-          </div>
-          <div class="fine-print">Demo defaults assume <code>http://localhost:3010/auth/callback</code> as the redirect URI and can be pointed at a registration journey using environment variables for authIndex routing.</div>
-        </div>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand"><strong>Ping Identity</strong><span>Epic Toolbox integration demonstrations</span></div>
+      <span class="version">Version 1.0.16</span>
+    </div>
+  </header>
+  <main>
+    <div class="hero">
+      <p class="eyebrow">Patient and provider identity</p>
+      <h1>PingOne Verify and Protect for Epic Toolbox</h1>
+      <p>Explore identity verification, threat detection, and orchestrated account journeys for MyChart patients and EpicCare Link external providers.</p>
+    </div>
+    <section aria-labelledby="integrations-title">
+      <h2 id="integrations-title">Two integrations. Stronger identity experiences.</h2>
+      <p class="section-intro">Support account creation and recovery with identity journeys tailored to patients and external providers.</p>
+      <div class="grid">
+        <article class="card">
+          <h3>MyChart</h3>
+          <p>Help protect patient account creation and recovery with PingOne Verify and Protect. Combine identity verification with real-time threat detection and no-code orchestration.</p>
+          <ul>
+            <li>Verify patient identity during account onboarding.</li>
+            <li>Assess risk during sensitive account journeys.</li>
+            <li>Guide patients through account recovery.</li>
+          </ul>
+          <a class="resource-link" href="https://hub.pingidentity.com/briefs/4415-pingone-verify-protect-mychart" target="_blank" rel="noopener noreferrer">Read the MyChart solution brief (opens in a new tab)</a>
+        </article>
+        <article class="card">
+          <h3>EpicCare Link</h3>
+          <p>Explore verified onboarding and account recovery for external providers. Orchestrate identity proofing and account journeys around your organization's requirements.</p>
+          <ul>
+            <li>Support identity verification for external providers.</li>
+            <li>Connect onboarding and recovery steps in a guided journey.</li>
+            <li>Learn more about the integration in Epic Showroom.</li>
+          </ul>
+          <a class="resource-link" href="https://showroom.epic.com/Listing?id=3821&amp;returnTitle=6" target="_blank" rel="noopener noreferrer">View the Epic Showroom listing (opens in a new tab)</a>
+        </article>
       </div>
-      <footer class="pane-footer">Epic and MyChart are registered trademarks of Epic Systems Corporation.</footer>
     </section>
-    <aside class="visual-pane">
-      <div class="visual-card">
-        <img src="https://demo.bxindustry.org/health/logo.svg" alt="BX-Health white logo" />
-        <div class="eyebrow">Epic Toolbox Integration</div>
-        <h2>Verified onboarding for external providers.</h2>
-        <p>IAL-2 verified onboarding and account recovery using strong identity proofing for your external providers, orchestrated to meet your business requirements.</p>
-        <div class="feature-list">
-          <span>IAL-2 identity proofing</span>
-          <span>Provider onboarding and account recovery</span>
-          <span>Business-aligned identity orchestration</span>
-        </div>
-        <nav class="resource-links" aria-label="Integration resources">
-          <a class="resource-link" href="https://marketplace.pingone.com/item/epiccarelink" target="_blank" rel="noopener noreferrer">PingOne Marketplace<span>View the integration listing</span></a>
-          <a class="resource-link" href="https://showroom.epic.com/listing?id=3821&amp;returntitle=6" target="_blank" rel="noopener noreferrer">Epic Showroom<span>View the Epic listing</span></a>
-        </nav>
+    <section aria-labelledby="demos-title">
+      <h2 id="demos-title">Simulated Demonstrations</h2>
+      <p class="section-intro">Explore the PingOne AIC demonstrations or MyChart with PingOne and DaVinci. EpicCare Link with PingOne and DaVinci is planned for a future phase.</p>
+      <div class="grid">
+        <article class="card demo-card">
+          <span class="badge">Available</span>
+          <h3>EpicCare Link with PingOne AIC</h3>
+          <p>Simulate external provider registration, sign-in, and account recovery using PingOne AIC.</p>
+          <a class="button" href="/epiccarelink">Launch EpicCare Link with PingOne AIC</a>
+        </article>
+        <article class="card demo-card">
+          <span class="badge">Available</span>
+          <h3>MyChart with PingOne AIC</h3>
+          <p>Simulate patient registration, sign-in, and account recovery in the Demo MyChart portal using PingOne AIC.</p>
+          <a class="button" href="/mychart">Launch MyChart with PingOne AIC</a>
+        </article>
+        <article class="card demo-card planned">
+          <span class="badge badge-planned">Coming soon</span>
+          <h3>EpicCare Link with PingOne and DaVinci</h3>
+          <p>A placeholder for a future simulated external provider experience using PingOne and DaVinci.</p>
+          <span class="planned-note">Not yet available</span>
+        </article>
+        <article class="card demo-card">
+          <span class="badge">Available</span>
+          <h3>MyChart with PingOne and DaVinci</h3>
+          <p>Simulate patient sign-in and registration through a PingOne-hosted journey orchestrated with DaVinci.</p>
+          <a class="button" href="/mychart-pingone">Launch MyChart with PingOne and DaVinci</a>
+        </article>
       </div>
-    </aside>
+      <p class="notice">These are independent simulated demonstrations, not live Epic applications. Use demo identities only. No real patient data or production credentials.</p>
+    </section>
   </main>
-  <script>
-    window.GleanBridge && window.GleanBridge.postMessage({
-      actionId: 'export-pdf',
-      type: 'glean-add-menu',
-      metadata: { label: 'Export as PDF', icon: 'export' }
-    });
-    window.GleanBridge && window.GleanBridge.onMessage && window.GleanBridge.onMessage('action', function(data) {
-      if (data.actionId === 'export-pdf') window.print();
-    });
-  </script>
+  <footer>Epic and MyChart are registered trademarks of Epic Systems Corporation. These demonstrations are not affiliated with or endorsed by Epic.</footer>
 </body>
 </html>

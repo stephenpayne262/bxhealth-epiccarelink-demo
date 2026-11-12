@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BX-Health EpicCare Link</title>
+  <style>
+    :root {
+      --artifact-background: var(--theme-background, #ffffff);
+      --artifact-background-light: var(--theme-background-light, #f5f7fa);
+      --artifact-background-mid: var(--theme-background-mid, #ebeff5);
+      --artifact-border-light: var(--theme-border-light, #d8dde6);
+      --artifact-border-dark: var(--theme-border-dark, #b9c3d0);
+      --artifact-primary-brand: var(--theme-primary-brand, #0b4c8c);
+      --artifact-primary-highlight: var(--theme-primary-highlight, #123d73);
+      --artifact-primary-hover: var(--theme-primary-hover, #0a3561);
+      --artifact-selected: var(--theme-selected, #e9f1fb);
+      --artifact-text-primary: var(--theme-text-primary, #14233a);
+      --artifact-text-secondary: var(--theme-text-secondary, #5c6b80);
+      --artifact-text-highlight: var(--theme-text-highlight, #fff8e5);
+      --artifact-success-bg: #e8f5ee;
+      --artifact-success-text: #184f2b;
+      --artifact-accent-soft: #dceaf8;
+      --artifact-panel-overlay: rgba(11, 76, 140, 0.84);
+      --artifact-shadow: 0 18px 38px rgba(18, 35, 58, 0.16);
+    }
+    html[data-theme='dark'] {
+      --artifact-success-bg: #143425;
+      --artifact-success-text: #d8f5df;
+      --artifact-accent-soft: #17314a;
+      --artifact-panel-overlay: rgba(8, 30, 54, 0.86);
+      --artifact-shadow: 0 24px 50px rgba(0, 0, 0, 0.32);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, Arial, sans-serif;
+      background: var(--artifact-background-light);
+      color: var(--artifact-text-primary);
+      min-height: 100vh;
+    }
+    .shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: minmax(360px, 520px) 1fr;
+    }
+    .login-pane {
+      background: var(--artifact-background);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 32px;
+      border-right: 1px solid var(--artifact-border-light);
+    }
+    .login-wrap {
+      max-width: 400px;
+      width: 100%;
+      margin: auto;
+    }
+    .top-brand {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      gap: 16px;
+    }
+    .top-brand img {
+      height: 34px;
+      width: auto;
+      display: block;
+    }
+    .product-chip {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 7px 10px;
+      border-radius: 999px;
+      color: var(--artifact-primary-highlight);
+      background: var(--artifact-accent-soft);
+      border: 1px solid var(--artifact-border-light);
+    }
+    .product-mark {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+    }
+    .app-version {
+      color: var(--artifact-text-secondary);
+      font-size: 10px;
+      line-height: 1.3;
+    }
+    .card {
+      background: var(--artifact-background);
+      border: 1px solid var(--artifact-border-light);
+      border-radius: 16px;
+      padding: 28px 24px;
+      box-shadow: var(--artifact-shadow);
+    }
+    h1 {
+      font-size: 30px;
+      line-height: 1.1;
+      margin: 0 0 6px;
+      color: var(--artifact-primary-highlight);
+    }
+    .login-title { font-size: 27px; }
+    .subhead {
+      font-size: 14px;
+      line-height: 1.55;
+      color: var(--artifact-text-secondary);
+      margin: 0 0 22px;
+    }
+    .actions {
+      display: grid;
+      gap: 12px;
+      margin-top: 18px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-height: 46px;
+      padding: 12px 16px;
+      border-radius: 10px;
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 700;
+      border: 1px solid transparent;
+      transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+      cursor: pointer;
+    }
+    .btn:hover, .btn:focus-visible {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 20px rgba(18, 35, 58, 0.14);
+    }
+    .btn-primary {
+      background: var(--artifact-primary-highlight);
+      color: var(--artifact-background);
+    }
+    .btn-primary:hover, .btn-primary:focus-visible {
+      background: var(--artifact-primary-hover);
+    }
+    .btn-secondary {
+      background: var(--artifact-background);
+      color: var(--artifact-primary-highlight);
+      border-color: var(--artifact-primary-brand);
+    }
+    .btn-secondary:hover, .btn-secondary:focus-visible {
+      background: var(--artifact-selected);
+    }
+    .link-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 16px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .link-row a, .help a, .fine-print a {
+      color: var(--artifact-primary-brand);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .link-row a:hover, .help a:hover, .fine-print a:hover { text-decoration: underline; }
+    .help {
+      margin-top: 26px;
+      padding-top: 18px;
+      border-top: 1px solid var(--artifact-border-light);
+      font-size: 13px;
+      color: var(--artifact-text-secondary);
+      line-height: 1.6;
+    }
+    .help strong {
+      display: block;
+      color: var(--artifact-text-primary);
+      margin-bottom: 4px;
+    }
+    .fine-print {
+      margin-top: 16px;
+      font-size: 11px;
+      line-height: 1.55;
+      color: var(--artifact-text-secondary);
+    }
+    .pane-footer {
+      width: 100%;
+      max-width: 400px;
+      margin: 0 auto;
+      padding-top: 14px;
+      border-top: 1px solid var(--artifact-border-light);
+      color: var(--artifact-text-secondary);
+      font-size: 11px;
+      line-height: 1.5;
+    }
+    .visual-pane {
+      position: relative;
+      background:
+        linear-gradient(135deg, var(--artifact-panel-overlay), rgba(11, 76, 140, 0.56)),
+        url('https://storage.googleapis.com/encore-prod-baseline-images/health-bg.jpeg') center/cover no-repeat;
+      display: flex;
+      align-items: flex-end;
+      justify-content: flex-start;
+      padding: 44px;
+      overflow: hidden;
+    }
+    .visual-card {
+      max-width: 560px;
+      color: var(--artifact-background);
+      animation: rise 0.55s ease both;
+    }
+    .visual-card img {
+      height: 52px;
+      width: auto;
+      display: block;
+      margin-bottom: 20px;
+    }
+    .eyebrow {
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      opacity: 0.88;
+      margin-bottom: 12px;
+      font-weight: 700;
+    }
+    .visual-card h2 {
+      font-size: 42px;
+      line-height: 1.04;
+      margin: 0 0 14px;
+      color: var(--artifact-background);
+    }
+    .visual-card p {
+      font-size: 16px;
+      line-height: 1.65;
+      margin: 0 0 18px;
+      max-width: 52ch;
+      opacity: 0.98;
+    }
+    .feature-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 20px;
+      font-size: 14px;
+    }
+    .feature-list span {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.16);
+      width: fit-content;
+    }
+    .resource-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 24px;
+      margin-top: 26px;
+      padding-top: 18px;
+      border-top: 1px solid rgba(255,255,255,0.24);
+    }
+    .resource-link {
+      display: grid;
+      gap: 4px;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.4;
+      text-decoration: none;
+    }
+    .resource-link span {
+      color: #d9eaf3;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .resource-link:hover { text-decoration: underline; }
+    .token-note {
+      margin-top: 14px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: var(--artifact-success-bg);
+      color: var(--artifact-success-text);
+      font-size: 12px;
+      line-height: 1.5;
+      border: 1px solid rgba(0,0,0,0.06);
+    }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(14px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @media (max-width: 980px) {
+      .shell { grid-template-columns: 1fr; }
+      .visual-pane { min-height: 320px; padding: 28px; }
+      .login-pane { min-height: auto; }
+      .visual-card h2 { font-size: 34px; }
+    }
+    @media (max-width: 480px) {
+      .login-pane { padding: 22px 18px; }
+      .top-brand { align-items: flex-start; }
+      .product-chip { max-width: 150px; text-align: right; }
+      .login-title { font-size: 24px; }
+      .link-row { align-items: flex-start; flex-direction: column; }
+    }
+    @media print {
+      body {
+        margin: 0;
+        padding: 0.4in 0.6in;
+        background: #fff;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+      }
+      .shell, main {
+        max-width: 100% !important;
+        width: 100% !important;
+        display: block !important;
+      }
+      .visual-pane {
+        min-height: 220px !important;
+        margin-top: 16px;
+      }
+      .card {
+        box-shadow: none !important;
+        border: 1px solid rgba(0,0,0,0.08) !important;
+      }
+      *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="login-pane">
+      <div class="login-wrap">
+        <div class="top-brand">
+          <img src="https://demo.bxindustry.org/health/logo.svg" alt="BX-Health logo" />
+          <div class="product-mark">
+            <div class="product-chip">Epic Toolbox Integration</div>
+            <span class="app-version">Version 1.0.16</span>
+          </div>
+        </div>
+        <div class="card">
+          <h1 class="login-title">Mock EpicCare Link Demo Application</h1>
+          <p class="subhead">A customer demonstration of verified onboarding and account recovery for external providers.</p>
+          <div class="actions">
+            <a class="btn btn-primary" href="/auth/login">Sign in with Ping</a>
+            <a class="btn btn-secondary" href="/auth/register">Register with Ping</a>
+            <a class="btn btn-secondary" href="/auth/recover">Recover Account with Ping</a>
+          </div>
+          <div class="token-note">Register and account recovery include a mock password step. Sign-in goes directly to the provider workspace after Ping verifies your identity.</div>
+          <div id="support" class="help">
+            <strong>Problems logging in?</strong>
+            Contact the BX-Health Help Desk at <a href="tel:18336914357">1-833-691-4357</a> or update the support block in <code>epiccarelink.html</code> for your customer story.
+          </div>
+          <div class="fine-print">Demo defaults assume <code>http://localhost:3010/auth/callback</code> as the redirect URI and can be pointed at a registration journey using environment variables for authIndex routing. <a href="/mychart">Open the separate Demo MyChart experience</a>.</div>
+        </div>
+      </div>
+      <footer class="pane-footer"><a href="/">Back to Epic Toolbox overview</a><br />Epic and MyChart are registered trademarks of Epic Systems Corporation.</footer>
+    </section>
+    <aside class="visual-pane">
+      <div class="visual-card">
+        <img src="https://demo.bxindustry.org/health/logo.svg" alt="BX-Health white logo" />
+        <div class="eyebrow">Epic Toolbox Integration</div>
+        <h2>Verified onboarding for external providers.</h2>
+        <p>IAL-2 verified onboarding and account recovery using strong identity proofing for your external providers, orchestrated to meet your business requirements.</p>
+        <div class="feature-list">
+          <span>IAL-2 identity proofing</span>
+          <span>Provider onboarding and account recovery</span>
+          <span>Business-aligned identity orchestration</span>
+        </div>
+        <nav class="resource-links" aria-label="Integration resources">
+          <a class="resource-link" href="https://marketplace.pingone.com/item/epiccarelink" target="_blank" rel="noopener noreferrer">PingOne Marketplace<span>View the integration listing</span></a>
+          <a class="resource-link" href="https://showroom.epic.com/listing?id=3821&amp;returntitle=6" target="_blank" rel="noopener noreferrer">Epic Showroom<span>View the Epic listing</span></a>
+        </nav>
+      </div>
+    </aside>
+  </main>
+  <script>
+    window.GleanBridge && window.GleanBridge.postMessage({
+      actionId: 'export-pdf',
+      type: 'glean-add-menu',
+      metadata: { label: 'Export as PDF', icon: 'export' }
+    });
+    window.GleanBridge && window.GleanBridge.onMessage && window.GleanBridge.onMessage('action', function(data) {
+      if (data.actionId === 'export-pdf') window.print();
+    });
+  </script>
+</body>
+</html>
