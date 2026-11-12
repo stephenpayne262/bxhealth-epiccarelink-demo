@@ -14,9 +14,9 @@ The overview introduces the MyChart and EpicCare Link integrations and links to 
 - Keeps sign-in first as the blue primary action, with unshaded registration and recovery actions
 - Highlights the Epic Toolbox integration, external provider use case, and Marketplace/Showroom listings
 - Starts OIDC Authorization Code flow with PKCE from:
-  - `/auth/login`
-  - `/auth/register`
-  - `/auth/recover`
+  - `/epiccarelink/auth/login`
+  - `/epiccarelink/auth/register`
+  - `/epiccarelink/auth/recover`
 - Supports optional AIC authIndex routing so the Register button can target a registration journey
 - Logs out through the OIDC provider end-session endpoint to clear the AIC browser session
 - Exchanges the authorization code server-side
@@ -29,7 +29,7 @@ The overview introduces the MyChart and EpicCare Link integrations and links to 
 
 ## Quick start
 1. In the alpha realm, configure the existing **epiccarelink** client and a separate **Demo MyChart** client. Register these URIs on the corresponding clients:
-  - Redirect URI: `http://localhost:3010/auth/callback`
+  - Redirect URI: `http://localhost:3010/epiccarelink/auth/callback`
   - Post Logout Redirect URI: `http://localhost:3010/`
   - Demo MyChart Redirect URI: `http://localhost:3010/mychart/auth/callback`
   - Demo MyChart Post Logout Redirect URI: `http://localhost:3010/`
@@ -47,7 +47,9 @@ docker compose up --build -d
 
 4. Open `http://localhost:3010` for the Toolbox overview, `http://localhost:3010/epiccarelink` for EpicCare Link with AIC, `http://localhost:3010/mychart` for MyChart with AIC, or `http://localhost:3010/mychart-pingone` for MyChart with PingOne and DaVinci. Follow logs with `docker compose logs -f`; stop the local container with `docker compose down`.
 
-EpicCare Link's existing `/auth/*` endpoints, callback URI, and logout return URI are unchanged. Logout can return to the new overview at `/`; its launch link takes you back to the EpicCare Link login page. No AIC client URI changes are required for this landing-page update.
+EpicCare Link now uses `/epiccarelink/auth/*` for login, registration, recovery, callback, and logout. Its token viewer is rendered directly at `/epiccarelink/auth/callback`, not the Toolbox overview at `/`. The legacy `/auth/*` routes remain working aliases for the same EpicCare Link client and sessions; they do not redirect callbacks or authorization codes. Both MyChart integrations are unchanged, and logout still defaults to the overview at `/`.
+
+To migrate, register the new callback URL on the AIC **epiccarelink** client, set `REDIRECT_URI` to that exact URL, and recreate the container (or separately update the Kubernetes Secret and restart the deployment). Existing environment overrides are preserved: a configured legacy `/auth/callback` continues to work, even when starting from the new sign-in links. Existing provider registrations are not changed automatically.
 
 The container receives settings from `.env`; the Node app does not read that file itself. No Node.js or npm installation on the Mac is needed. Run syntax checks and the focused OIDC routing tests inside Docker with `docker build -f Dockerfile --target check .`.
 
@@ -127,7 +129,7 @@ AIC_RECOVER_AUTH_INDEX_VALUE=your-recovery-journey-name
 
 Use `/redeploy-bxhealth-epiccarelink-demo` only after completing local testing in Docker. The app Ingress uses the cluster's ExternalDNS hostname annotation to publish its hostname through AWS. Pass `--skip-dns` to defer the annotation and test with `curl --resolve` or a hosts-file override. The skill targets context `ping-dev-aws-us-east-2-oidc`, namespace `ping-devops-stephenpayne`, and the unique host `bxhealth-epiccarelink-demo.ping-devops.com`. It uses the existing `nginx-public` Ingress and the controller's `*.ping-devops.com` certificate. Never provision its DNS record manually in Route 53.
 
-Register `https://bxhealth-epiccarelink-demo.ping-devops.com/auth/callback` and `https://bxhealth-epiccarelink-demo.ping-devops.com/mychart/auth/callback` as login redirect URIs on their corresponding PingOne AIC clients. Register the root URL `/` on the same host as both clients' post-logout redirect URI. Set both clients' deployment credentials and redirect settings in `infra/.env.k8s`, created from `infra/k8s/cluster.env.example`. That file is ignored by Git. The deployment skill never changes the FHIR/MCP app, its Secret, or shared Ingress/TLS resources, and it publishes the container image without pushing the Git branch.
+Register `https://bxhealth-epiccarelink-demo.ping-devops.com/epiccarelink/auth/callback` and `https://bxhealth-epiccarelink-demo.ping-devops.com/mychart/auth/callback` as login redirect URIs on their corresponding PingOne AIC clients. Register the root URL `/` on the same host as both clients' post-logout redirect URI. Set both clients' deployment credentials and redirect settings in `infra/.env.k8s`, created from `infra/k8s/cluster.env.example`. That file is ignored by Git. The deployment skill never changes the FHIR/MCP app, its Secret, or shared Ingress/TLS resources, and it publishes the container image without pushing the Git branch.
 
 To enable MyChart with PingOne and DaVinci in a future deployment, also configure the `MYCHART_PINGONE_*` settings from the cluster example and register `/mychart-pingone/auth/callback` as the login redirect and `/` as the post-logout return on that host with the separate PingOne app. No AWS resources are changed by local configuration or Docker testing.
 # bxhealth-epiccarelink-demo

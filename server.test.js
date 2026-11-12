@@ -88,6 +88,103 @@ test('MyChart pages isolate provider links and only AIC exposes recovery', async
   assert.equal((await app.request('/epiccarelink-pingone')).status, 404);
 });
 
+test('EpicCare Link uses prefixed actions while both route families select its AIC client', async () => {
+  const app = loadApp();
+  const page = await app.request('/epiccarelink');
+  for (const flow of ['login', 'register', 'recover']) {
+    assert.ok(page.body.includes(`href="/epiccarelink/auth/${flow}"`));
+    for (const prefix of ['/epiccarelink', '']) {
+      const res = await app.request(`${prefix}/auth/${flow}`);
+      assert.equal(res.status, 302);
+      const url = new URL(res.headers.Location);
+      assert.equal(url.origin + url.pathname, aicDiscovery.authorization_endpoint);
+      assert.equal(url.searchParams.get('client_id'), 'epiccarelink');
+      assert.equal(url.searchParams.get('redirect_uri'), 'http://localhost:3010/epiccarelink/auth/callback');
+      const session = app.api.sessions.get(url.searchParams.get('state'));
+      assert.equal(session.app, 'epiccarelink');
+      assert.equal(session.flow, flow);
+      assert.equal(session.nonce, url.searchParams.get('nonce'));
+      assert.equal(url.searchParams.get('code_challenge_method'), 'S256');
+      assert.equal(require('node:crypto').createHash('sha256').update(session.codeVerifier).digest('base64url'), url.searchParams.get('code_challenge'));
+    }
+  }
+  assert.doesNotMatch(page.body, /href="\/auth\//);
+  assert.equal((await app.request('/epiccarelink-pingone/auth/login')).status, 404);
+});
+
+test('EpicCare Link callback aliases exchange codes directly and preserve configured redirect URIs', async () => {
+  for (const [startPrefix, callbackPrefix, redirectUri] of [
+    ['/epiccarelink', '/epiccarelink', 'http://localhost:3010/epiccarelink/auth/callback'],
+    ['', '/epiccarelink', 'http://localhost:3010/epiccarelink/auth/callback'],
+    ['/epiccarelink', '', 'https://demo.example/auth/callback'],
+    ['', '', 'https://demo.example/auth/callback']
+  ]) {
+    const app = loadApp(redirectUri.startsWith('https:') ? { REDIRECT_URI: redirectUri } : {});
+    const redirect = await app.request(`${startPrefix}/auth/login`);
+    const state = new URL(redirect.headers.Location).searchParams.get('state');
+    assert.equal(new URL(redirect.headers.Location).searchParams.get('redirect_uri'), redirectUri);
+    const session = app.api.sessions.get(state);
+    let exchanges = 0;
+    app.api.setVerifier(async (token, nonce, endpoints, audience) => {
+      assert.equal(token, 'synthetic-id-token');
+      assert.equal(nonce, session.nonce);
+      assert.equal(endpoints.issuer, aicDiscovery.issuer);
+      assert.equal(audience, 'epiccarelink');
+      return { sub: 'synthetic-user' };
+    });
+    const discoveryFetch = app.context.fetch;
+    app.context.fetch = async (url, options) => {
+      if (url !== aicDiscovery.token_endpoint) return discoveryFetch(url, options);
+      exchanges++;
+      const body = new URLSearchParams(options.body);
+      assert.equal(body.get('redirect_uri'), redirectUri);
+      assert.equal(body.get('code_verifier'), session.codeVerifier);
+      assert.equal(body.get('client_id'), 'epiccarelink');
+      return { ok: true, json: async () => ({ id_token: 'synthetic-id-token' }) };
+    };
+    const wrongApp = await app.request(`/mychart/auth/callback?state=${state}&code=synthetic-code`);
+    assert.equal(wrongApp.status, 400);
+    assert.equal(exchanges, 0);
+    assert.equal(app.api.sessions.has(state), true);
+    const callback = await app.request(`${callbackPrefix}/auth/callback?state=${state}&code=synthetic-code`);
+    assert.equal(callback.status, 200);
+    assert.equal(callback.headers.Location, undefined);
+    assert.equal(exchanges, 1);
+    assert.match(callback.body, /EpicCare Link/);
+    assert.match(callback.body, /action="\/epiccarelink\/auth\/logout"/);
+    for (const prefix of ['/epiccarelink', '']) {
+      const replay = await app.request(`${prefix}/auth/callback?state=${state}&code=synthetic-code`);
+      assert.equal(replay.status, 400);
+      assert.match(replay.body, /href="\/epiccarelink">Back to login/);
+      assert.match(replay.body, /href="\/epiccarelink\/auth\/register"/);
+    }
+    assert.equal(exchanges, 1);
+  }
+});
+
+test('EpicCare Link logout aliases use its provider and prefixed callbacks reject MyChart state', async () => {
+  const app = loadApp();
+  for (const prefix of ['/epiccarelink', '']) {
+    const req = Readable.from([Buffer.from('id_token_hint=synthetic-id-token')]);
+    req.method = 'POST';
+    const logout = await app.request(`${prefix}/auth/logout`, req);
+    assert.equal(logout.status, 302);
+    const url = new URL(logout.headers.Location);
+    assert.equal(url.origin + url.pathname, aicDiscovery.end_session_endpoint);
+    assert.equal(url.searchParams.get('client_id'), 'epiccarelink');
+    assert.equal(url.searchParams.get('post_logout_redirect_uri'), 'http://localhost:3010/');
+  }
+  for (const prefix of ['/mychart', '/mychart-pingone']) {
+    const redirect = await app.request(`${prefix}/auth/login`);
+    const state = new URL(redirect.headers.Location).searchParams.get('state');
+    const rejected = await app.request(`/epiccarelink/auth/callback?state=${state}&code=synthetic-code`);
+    assert.equal(rejected.status, 400);
+    assert.equal(app.api.sessions.has(state), true);
+    assert.match(rejected.body, /href="\/epiccarelink">Back to login/);
+  }
+  assert.equal(app.requests.some(request => request.url === aicDiscovery.token_endpoint), false);
+});
+
 test('login and registration use PingOne settings and PKCE without AIC routing parameters', async () => {
   const app = loadApp();
   for (const flow of ['login', 'register']) {

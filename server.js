@@ -15,8 +15,8 @@ const CONFIG = {
       clientId: process.env.CLIENT_ID || 'epiccarelink',
       clientSecret: process.env.CLIENT_SECRET || 'epicsecret',
       tokenEndpointAuthMethod: process.env.TOKEN_ENDPOINT_AUTH_METHOD || 'client_secret_post',
-      redirectUri: process.env.REDIRECT_URI || `http://localhost:${PORT}/auth/callback`,
-      postLogoutRedirectUri: process.env.POST_LOGOUT_REDIRECT_URI || `${new URL(process.env.REDIRECT_URI || `http://localhost:${PORT}/auth/callback`).origin}/`
+      redirectUri: process.env.REDIRECT_URI || `http://localhost:${PORT}/epiccarelink/auth/callback`,
+      postLogoutRedirectUri: process.env.POST_LOGOUT_REDIRECT_URI || `${new URL(process.env.REDIRECT_URI || `http://localhost:${PORT}/epiccarelink/auth/callback`).origin}/`
     },
     mychart: {
       clientId: process.env.MYCHART_CLIENT_ID || 'demo-mychart',
@@ -328,7 +328,7 @@ function serializeForInlineScript(value) {
 function renderPostLoginPage({ flow, app, tokenResponse, idTokenClaims, userInfo, mappedClaims }) {
   const isMyChart = app !== 'epiccarelink';
   const appTitle = isMyChart ? 'Demo MyChart' : 'EpicCare Link';
-  const appPath = isMyChart ? `/${app}` : '';
+  const appPath = `/${app}`;
   const provider = app === 'mychart-pingone' ? 'PingOne and DaVinci' : 'PingOne AIC';
   const demoData = serializeForInlineScript({ flow, tokenResponse, idTokenClaims, userInfo, mappedClaims });
   const needsPasswordStep = flow === 'register' || flow === 'recover';
@@ -453,7 +453,7 @@ h1 { margin: 0 0 9px; color: var(--ink); font-size: 27px; line-height: 1.18; }
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="${appPath || '/epiccarelink'}" aria-label="BX-Health demo home">
+    <a class="brand" href="${appPath}" aria-label="BX-Health demo home">
       <img src="https://demo.bxindustry.org/health/logo.svg" alt="" />
       <span class="brand-name"><small>BX-Health demo</small><strong>${appTitle}</strong></span>
     </a>
@@ -673,7 +673,7 @@ h1 { margin: 0 0 9px; color: var(--ink); font-size: 27px; line-height: 1.18; }
 
 function renderResultPage({ flow, app = 'epiccarelink', endpoints, tokenResponse, idTokenClaims, userInfo, mappedClaims, error, correlationId }) {
   const appTitle = app === 'epiccarelink' ? 'EpicCare Link' : 'Demo MyChart';
-  const appPath = app === 'epiccarelink' ? '' : `/${app}`;
+  const appPath = `/${app}`;
   const payload = tokenResponse ? JSON.stringify(tokenResponse, null, 2) : '';
   const idPayload = idTokenClaims ? JSON.stringify(idTokenClaims, null, 2) : '';
   const uiPayload = userInfo ? JSON.stringify(userInfo, null, 2) : '';
@@ -748,7 +748,7 @@ pre { margin: 0; padding: 14px; background: var(--panel-soft); border: 1px solid
         <div class="meta-row"><strong>Issuer</strong><span>${escapeHtml(endpoints.issuer)}</span></div>
       </div>
       <div class="actions">
-        <a class="btn btn-primary" href="${appPath || '/epiccarelink'}">Back to login</a>
+        <a class="btn btn-primary" href="${appPath}">Back to login</a>
         <a class="btn btn-secondary" href="${appPath}/auth/register">Run registration again</a>
       </div>
     </article>
@@ -1029,8 +1029,8 @@ const server = http.createServer(async (req, res) => {
 
   const app = pathname.startsWith('/mychart-pingone/') ? 'mychart-pingone'
     : pathname.startsWith('/mychart/') ? 'mychart' : 'epiccarelink';
-  const appPath = app === 'epiccarelink' ? '' : `/${app}`;
-  const routePath = pathname.slice(appPath.length);
+  const appPath = `/${app}`;
+  const routePath = pathname.startsWith(`${appPath}/`) ? pathname.slice(appPath.length) : pathname;
   const requestedFlow = routePath.slice('/auth/'.length);
   req.oidc.app = app;
   req.oidc.flow = ['login', 'register', 'recover', 'logout'].includes(requestedFlow) ? requestedFlow : 'unknown';
@@ -1043,7 +1043,7 @@ const server = http.createServer(async (req, res) => {
     if (routePath === '/auth/callback') return await handleCallback(req, res, requestUrl, app);
   } catch (error) {
     logOidc(req.oidc, 'request.failed', {}, 'error');
-    return send(res, 503, `<h1>Authentication unavailable</h1><p>Check this demo's OIDC configuration and provider connectivity.</p><p>Diagnostic reference: <code>${escapeHtml(req.oidc.correlationId)}</code></p><a href="${appPath || '/epiccarelink'}">Back to login</a>`);
+    return send(res, 503, `<h1>Authentication unavailable</h1><p>Check this demo's OIDC configuration and provider connectivity.</p><p>Diagnostic reference: <code>${escapeHtml(req.oidc.correlationId)}</code></p><a href="${appPath}">Back to login</a>`);
   }
 
   send(res, 404, '<h1>Not found</h1>');
