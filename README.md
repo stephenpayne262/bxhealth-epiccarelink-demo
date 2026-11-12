@@ -118,6 +118,9 @@ AIC_RECOVER_AUTH_INDEX_VALUE=your-recovery-journey-name
 - The app defaults to the values provided in the ticket.
 - AIC uses discovery first when available, then falls back to its explicit endpoints. The separate PingOne demo requires its own HTTPS discovery URL and metadata.
 - The callback verifies ID-token signatures using the discovery JWKS and checks issuer, audience, expiration, issued-at time, and the login-flow nonce before displaying claims. Set `JWKS_URI` when discovery is unavailable and explicit endpoints are used.
+- Pending login sessions expire after 10 minutes and are pruned on authorization and callback requests. The process holds at most 1,000 pending attempts across all demos; at capacity, new attempts receive HTTP 429 with a retry hint instead of evicting active attempts. An expired journey must be restarted from its login page.
+- Discovery, token exchange, and UserInfo requests have 10-second deadlines. Discovery preserves the documented AIC fallback behavior; token failures return an error, and optional UserInfo failures are logged while verified ID-token claims remain available.
+- Malformed request URLs or Host values return HTTP 400 with a redacted diagnostic event rather than rejecting the request handler.
 - This remains a demo: sessions are process-local, and the result page intentionally displays the token response. Do not use real patient data or production credentials.
 
 ## AWS deployment

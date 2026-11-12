@@ -1,0 +1,12 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "git remote": true,
+        "git config": true,
+        "test": true,
+        "printf": true,
+        "kubectl config": true,
+        "kubectl --context ping-dev-aws-us-east-2-oidc": true,
+        "docker run": true,
+        "shasum": true
+    }
+}

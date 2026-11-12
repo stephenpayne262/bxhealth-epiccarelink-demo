@@ -25,7 +25,7 @@ function response() {
   };
 }
 
-function loadApp(overrides = {}) {
+function loadApp(overrides = {}, globals = {}) {
   const requests = [];
   const errors = [];
   const logs = [];
@@ -52,7 +52,8 @@ function loadApp(overrides = {}) {
       if (url === 'https://pingone.example/discovery') return { ok: true, json: async () => pingoneDiscovery };
       if (url === 'https://aic.example/discovery') return { ok: true, json: async () => aicDiscovery };
       throw new Error('Unexpected provider request');
-    }
+    },
+    ...globals
   });
   vm.runInContext(`${source}\nthis.api = {
     sessions, getClientConfig, buildTokenRequest, renderPostLoginPage,
@@ -65,7 +66,7 @@ function loadApp(overrides = {}) {
     },
     async request(url, req = {}) {
       const res = response();
-      await handler(Object.assign(req, { url, headers: { host: 'localhost:3010' } }), res);
+      await handler(Object.assign(req, { url, headers: { host: 'localhost:3010', ...req.headers } }), res);
       return res;
     }
   };
@@ -345,4 +346,102 @@ test('failed PingOne ID-token validation never displays the returned tokens', as
   assert.equal(res.status, 400);
   assert.match(res.body, /ID token validation failed/);
   assert.doesNotMatch(res.body, /synthetic-invalid-token|Your demo workspace is ready/);
+});
+
+test('malformed URLs return 400 without rejecting the handler or logging raw input', async () => {
+  const app = loadApp();
+  for (const [url, host] of [['/', '['], ['http://[private-url-marker', 'localhost:3010']]) {
+    const res = await app.request(url, { headers: { host } });
+    assert.equal(res.status, 400);
+    assert.equal(res.body, 'Invalid request URL.');
+    assert.ok(res.headers['X-OIDC-Correlation-ID']);
+  }
+  assert.equal(app.diagnostics().filter(entry => entry.event === 'request.invalid_url').length, 2);
+  assert.equal(JSON.stringify([...app.logs, ...app.errors]).includes('private-url-marker'), false);
+  assert.equal((await app.request('/health')).status, 200);
+});
+
+test('pending sessions remain valid before ten minutes and are rejected at expiration', async () => {
+  let now = Date.now();
+  class Clock extends Date {
+    static now() { return now; }
+  }
+  const app = loadApp({}, { Date: Clock });
+  const redirect = await app.request('/mychart-pingone/auth/login');
+  const state = new URL(redirect.headers.Location).searchParams.get('state');
+  now += 10 * 60 * 1000 - 1;
+  await app.request('/mychart/auth/login');
+  assert.equal(app.api.sessions.has(state), true);
+  now += 1;
+  const expired = await app.request(`/mychart-pingone/auth/callback?state=${state}&code=synthetic-code`);
+  assert.equal(expired.status, 400);
+  assert.match(expired.body, /Missing or expired state\/code/);
+  assert.equal(app.api.sessions.has(state), false);
+  assert.equal(app.api.sessions.size, 1);
+  assert.equal(app.requests.some(request => request.url === pingoneDiscovery.token_endpoint), false);
+});
+
+test('pending sessions cap at one thousand and recover capacity by pruning expired attempts', async () => {
+  const app = loadApp();
+  for (let index = 0; index < 1000; index++) {
+    app.api.sessions.set(`synthetic-state-${index}`, { createdAt: Date.now(), app: 'mychart' });
+  }
+  for (const route of ['/auth/login', '/mychart/auth/register', '/mychart-pingone/auth/login']) {
+    const res = await app.request(route);
+    assert.equal(res.status, 429);
+    assert.equal(res.headers['Retry-After'], '60');
+    assert.equal(res.headers.Location, undefined);
+    assert.equal(app.api.sessions.size, 1000);
+  }
+  app.api.sessions.get('synthetic-state-0').createdAt -= 10 * 60 * 1000;
+  const retry = await app.request('/mychart-pingone/auth/login');
+  assert.equal(retry.status, 302);
+  assert.equal(app.api.sessions.size, 1000);
+  assert.equal(app.api.sessions.has('synthetic-state-0'), false);
+  assert.equal(app.api.sessions.has('synthetic-state-1'), true);
+});
+
+test('provider deadlines abort stalled discovery, token exchange and optional UserInfo calls', async () => {
+  for (const stage of ['aic_discovery', 'pingone_discovery', 'token', 'userinfo']) {
+    const deadlines = [];
+    const app = loadApp({ OIDC_DEBUG: 'true' }, {
+      AbortSignal: {
+        timeout(milliseconds) {
+          deadlines.push(milliseconds);
+          const controller = new AbortController();
+          setTimeout(() => controller.abort(), 5);
+          return controller.signal;
+        }
+      }
+    });
+    const stall = options => new Promise((resolve, reject) => {
+      assert.ok(options.signal);
+      if (options.signal.aborted) reject(options.signal.reason);
+      else options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true });
+    });
+    if (stage.endsWith('_discovery')) {
+      app.context.fetch = async (url, options) => stall(options);
+      const res = await app.request(stage === 'aic_discovery' ? '/mychart/auth/login' : '/mychart-pingone/auth/login');
+      assert.equal(res.status, stage === 'aic_discovery' ? 302 : 503);
+      assert.ok(app.diagnostics().some(entry => entry.event === 'discovery.failed'));
+    } else {
+      const redirect = await app.request('/mychart-pingone/auth/login');
+      const state = new URL(redirect.headers.Location).searchParams.get('state');
+      const discoveryFetch = app.context.fetch;
+      app.context.fetch = async (url, options) => {
+        if (url === pingoneDiscovery.token_endpoint) {
+          if (stage === 'token') return stall(options);
+          return { ok: true, status: 200, json: async () => ({ id_token: 'synthetic-id-token', access_token: 'synthetic-access-token' }) };
+        }
+        if (url === pingoneDiscovery.userinfo_endpoint) return stall(options);
+        return discoveryFetch(url, options);
+      };
+      app.api.setVerifier(async () => ({ sub: 'synthetic-user' }));
+      const res = await app.request(`/mychart-pingone/auth/callback?state=${state}&code=synthetic-code`);
+      assert.equal(res.status, stage === 'token' ? 500 : 200);
+      assert.ok(app.diagnostics().some(entry => entry.event === (stage === 'token' ? 'token_exchange.failed' : 'userinfo.failed')));
+    }
+    assert.ok(deadlines.length > 0);
+    assert.ok(deadlines.every(milliseconds => milliseconds === 10000));
+  }
 });

@@ -6,6 +6,9 @@ const { URL } = require('url');
 
 const PORT = Number(process.env.PORT || 3010);
 const OIDC_DEBUG = process.env.OIDC_DEBUG === 'true';
+const SESSION_TTL_MS = 10 * 60 * 1000;
+const MAX_PENDING_SESSIONS = 1000;
+const OIDC_REQUEST_TIMEOUT_MS = 10000;
 const CONFIG = {
   apps: {
     epiccarelink: {
@@ -88,6 +91,14 @@ function buildTokenRequest(client, tokenBody) {
 }
 
 const sessions = new Map();
+
+function pruneExpiredSessions() {
+  const now = Date.now();
+  for (const [state, session] of sessions) {
+    if (now - session.createdAt >= SESSION_TTL_MS) sessions.delete(state);
+  }
+}
+
 const oauthErrors = new Set([
   'invalid_request', 'unauthorized_client', 'access_denied', 'unsupported_response_type',
   'invalid_scope', 'server_error', 'temporarily_unavailable', 'login_required',
@@ -170,7 +181,7 @@ async function loadDiscovery(app = 'epiccarelink', diagnostic) {
   const startedAt = Date.now();
   logOidc(diagnostic, 'discovery.started');
   try {
-    const response = await fetch(discoveryUrl, isPingOne ? { signal: AbortSignal.timeout(10000) } : undefined);
+    const response = await fetch(discoveryUrl, { signal: AbortSignal.timeout(OIDC_REQUEST_TIMEOUT_MS) });
     logOidc(diagnostic, 'discovery.response', { httpStatus: response.status, durationMs: Date.now() - startedAt });
     if (!response.ok) throw new Error(`Discovery failed: ${response.status}`);
     const discovery = await response.json();
@@ -761,6 +772,12 @@ pre { margin: 0; padding: 14px; background: var(--panel-soft); border: 1px solid
 async function handleAuthorize(req, res, flow, app = 'epiccarelink') {
   logOidc(req.oidc, 'authorization.started');
   const endpoints = await resolveEndpoints(app, req.oidc);
+  pruneExpiredSessions();
+  if (sessions.size >= MAX_PENDING_SESSIONS) {
+    logOidc(req.oidc, 'authorization.capacity_exceeded', {}, 'warn');
+    res.setHeader('Retry-After', '60');
+    return send(res, 429, 'Too many pending sign-in attempts. Please try again later.', 'text/plain; charset=utf-8');
+  }
   const state = randomString(24);
   const nonce = randomString(24);
   const codeVerifier = randomString(48);
@@ -849,6 +866,7 @@ async function handleCallback(req, res, requestUrl, app = 'epiccarelink') {
   const state = requestUrl.searchParams.get('state');
   const error = requestUrl.searchParams.get('error');
   const errorDescription = requestUrl.searchParams.get('error_description');
+  pruneExpiredSessions();
   const session = state ? sessions.get(state) : null;
   const stateMatched = Boolean(session && session.app === app);
   if (stateMatched) {
@@ -905,7 +923,10 @@ async function handleCallback(req, res, requestUrl, app = 'epiccarelink') {
   const tokenStartedAt = Date.now();
   logOidc(req.oidc, 'token_exchange.started');
   try {
-    const tokenRes = await fetch(endpoints.tokenEndpoint, buildTokenRequest(client, tokenBody));
+    const tokenRes = await fetch(endpoints.tokenEndpoint, {
+      ...buildTokenRequest(client, tokenBody),
+      signal: AbortSignal.timeout(OIDC_REQUEST_TIMEOUT_MS)
+    });
     logOidc(req.oidc, 'token_exchange.response', { httpStatus: tokenRes.status, durationMs: Date.now() - tokenStartedAt });
     tokenResponse = await tokenRes.json();
     if (!tokenRes.ok) {
@@ -958,7 +979,8 @@ async function handleCallback(req, res, requestUrl, app = 'epiccarelink') {
     logOidc(req.oidc, 'userinfo.started');
     try {
       const uiRes = await fetch(endpoints.userInfoEndpoint, {
-        headers: { Authorization: `Bearer ${tokenResponse.access_token}` }
+        headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
+        signal: AbortSignal.timeout(OIDC_REQUEST_TIMEOUT_MS)
       });
       if (uiRes.ok) {
         userInfo = await uiRes.json();
@@ -986,7 +1008,17 @@ async function handleCallback(req, res, requestUrl, app = 'epiccarelink') {
 }
 
 const server = http.createServer(async (req, res) => {
-  const requestUrl = new URL(req.url, `http://${req.headers.host}`);
+  req.oidc = {
+    correlationId: crypto.randomUUID(), app: 'unknown', flow: 'unknown', startedAt: Date.now()
+  };
+  res.setHeader('X-OIDC-Correlation-ID', req.oidc.correlationId);
+  let requestUrl;
+  try {
+    requestUrl = new URL(req.url, `http://${req.headers.host}`);
+  } catch {
+    logOidc(req.oidc, 'request.invalid_url', {}, 'warn');
+    return send(res, 400, 'Invalid request URL.', 'text/plain; charset=utf-8');
+  }
   const pathname = requestUrl.pathname;
 
   if (pathname === '/health') return send(res, 200, JSON.stringify({ status: 'ok' }), 'application/json');
@@ -1000,12 +1032,8 @@ const server = http.createServer(async (req, res) => {
   const appPath = app === 'epiccarelink' ? '' : `/${app}`;
   const routePath = pathname.slice(appPath.length);
   const requestedFlow = routePath.slice('/auth/'.length);
-  req.oidc = {
-    correlationId: crypto.randomUUID(), app,
-    flow: ['login', 'register', 'recover', 'logout'].includes(requestedFlow) ? requestedFlow : 'unknown',
-    startedAt: Date.now()
-  };
-  res.setHeader('X-OIDC-Correlation-ID', req.oidc.correlationId);
+  req.oidc.app = app;
+  req.oidc.flow = ['login', 'register', 'recover', 'logout'].includes(requestedFlow) ? requestedFlow : 'unknown';
 
   try {
     if (routePath === '/auth/login') return await handleAuthorize(req, res, 'login', app);
